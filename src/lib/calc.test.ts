@@ -6,6 +6,8 @@ import {
   addDays,
   addMonths,
   computeTotals,
+  countThisMonth,
+  nextMonthStart,
   depositStatus,
   lateFeeAmount,
   daysBetween,
@@ -160,4 +162,12 @@ test('late fee amounts', () => {
   assert.equal(lateFeeAmount(1234.56, 'percent', 1.5), 18.52);
   assert.equal(lateFeeAmount(500, 'amount', 25), 25);
   assert.equal(lateFeeAmount(-5, 'percent', 10), 0);
+});
+
+test('monthly free allowance resets with the calendar month', () => {
+  assert.equal(countThisMonth({ month: '2026-09', count: 3 }, '2026-09-30'), 3);
+  assert.equal(countThisMonth({ month: '2026-09', count: 3 }, '2026-10-01'), 0);
+  assert.equal(countThisMonth(undefined, '2026-10-01'), 0);
+  assert.equal(nextMonthStart('2026-09-24'), '2026-10-01');
+  assert.equal(nextMonthStart('2026-12-31'), '2027-01-01');
 });

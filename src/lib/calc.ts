@@ -115,6 +115,17 @@ export function daysBetween(fromISO: string, toISO: string): number {
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
 }
 
+/** Documents created so far in `today`'s calendar month (the counter resets when the month changes). */
+export function countThisMonth(counter: { month: string; count: number } | undefined, today: string): number {
+  return counter && counter.month === today.slice(0, 7) ? counter.count : 0;
+}
+
+/** First day of the month after `today`, when the free allowance resets. */
+export function nextMonthStart(today: string): string {
+  const [y, m] = today.split('-').map(Number);
+  return todayISO(new Date(y, m, 1));
+}
+
 export function formatDocNumber(prefix: string, n: number): string {
   return `${prefix}${String(n).padStart(4, '0')}`;
 }

@@ -42,7 +42,7 @@ A mobile invoice and estimate app for iOS and Android, built with Expo and React
 
 | | Free | Pro |
 | --- | --- | --- |
-| Invoices and estimates | 3 total | Unlimited |
+| Invoices and estimates | 3 per month | Unlimited |
 | PDF watermark | Yes | No |
 | Templates | Classic | All 4 |
 | Brand color | Default | Custom |

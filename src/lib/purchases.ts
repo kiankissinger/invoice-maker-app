@@ -13,7 +13,7 @@ import { scheduleTrialReminder } from './notifications';
 /** RevenueCat entitlement that unlocks every Pro feature. */
 export const PRO_ENTITLEMENT = 'pro';
 
-/** How many documents (invoices + estimates) a free user can ever create. */
+/** How many documents (invoices + estimates) a free user can create per calendar month. */
 export const FREE_DOCUMENT_LIMIT = 3;
 
 export type ProFeature =

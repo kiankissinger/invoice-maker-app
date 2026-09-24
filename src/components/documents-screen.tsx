@@ -5,7 +5,7 @@ import { StyleSheet, View } from 'react-native';
 import { AppText, Button, Card, EmptyState, Field, ListRow, Row, Screen, Segmented, StatusBadge } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useProGate } from '@/hooks/use-pro-gate';
-import { computeTotals, displayStatus, todayISO } from '@/lib/calc';
+import { computeTotals, displayStatus, nextMonthStart, todayISO } from '@/lib/calc';
 import { formatDate, formatMoney } from '@/lib/format';
 import { FREE_DOCUMENT_LIMIT } from '@/lib/purchases';
 import { useStore } from '@/lib/store';
@@ -103,7 +103,9 @@ export function DocumentsScreen({ type }: { type: DocType }) {
         {!isPro ? (
           <Card>
             <AppText variant="caption">
-              Free plan: {freeDocumentsLeft} of {FREE_DOCUMENT_LIMIT} documents left. Upgrade for unlimited invoices, no watermark and every template.
+              Free plan: {freeDocumentsLeft} of {FREE_DOCUMENT_LIMIT} documents left this month
+              {freeDocumentsLeft === 0 ? ` (more on ${formatDate(nextMonthStart(today))})` : ''}. Upgrade for unlimited invoices, no watermark and
+              every template.
             </AppText>
             <Button title="Start free trial" variant="secondary" icon="sparkles" onPress={() => router.push('/paywall')} />
           </Card>

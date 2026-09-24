@@ -3,7 +3,7 @@ import { randomUUID } from 'expo-crypto';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-import { addDays, formatDocNumber, todayISO } from './calc';
+import { addDays, countThisMonth, formatDocNumber, todayISO } from './calc';
 import type {
   BusinessProfile,
   CatalogItem,
@@ -65,8 +65,8 @@ type State = {
   clients: Record<string, Client>;
   catalog: Record<string, CatalogItem>;
   expenses: Record<string, Expense>;
-  /** Lifetime count; drives the free-tier limit so deleting documents doesn't reset it. */
-  documentsCreated: number;
+  /** Documents created this calendar month; drives the free-tier limit so deleting documents doesn't reset it. */
+  createdThisMonth: { month: string; count: number };
   /** "type:id" -> deletion time, so deletes can be synced. */
   tombstones: Record<string, string>;
   syncMeta: { cursor: number; pushedUpTo: string | null };
@@ -101,7 +101,7 @@ const initialData = {
   clients: {},
   catalog: {},
   expenses: {},
-  documentsCreated: 0,
+  createdThisMonth: { month: '', count: 0 },
   tombstones: {},
   syncMeta: { cursor: 0, pushedUpTo: null },
 };
@@ -123,7 +123,10 @@ export const useStore = create<State & Actions>()(
       const insert = (doc: InvoiceDocument) =>
         set((s) => ({
           documents: { ...s.documents, [doc.id]: doc },
-          documentsCreated: s.documentsCreated + 1,
+          createdThisMonth: {
+            month: todayISO().slice(0, 7),
+            count: countThisMonth(s.createdThisMonth, todayISO()) + 1,
+          },
         }));
 
       return {
@@ -374,7 +377,7 @@ export const useStore = create<State & Actions>()(
     },
     {
       name: 'invoice-maker-store',
-      version: 3,
+      version: 4,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted, version) => {
         const state = persisted as State;
@@ -389,6 +392,11 @@ export const useStore = create<State & Actions>()(
           if (state.profile && (state.profile.name || state.profile.email)) state.profile.updatedAt = nowISO();
         }
         if (version < 3) state.expenses = state.expenses ?? {};
+        if (version < 4) {
+          // v4 switches the free tier from 3 documents ever to 3 per month; start everyone fresh.
+          delete (state as { documentsCreated?: number }).documentsCreated;
+          state.createdThisMonth = { month: '', count: 0 };
+        }
         return state;
       },
       partialize: ({ hydrated: _hydrated, ...rest }) => rest,
