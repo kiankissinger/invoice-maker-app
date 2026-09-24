@@ -1,5 +1,5 @@
 // Pure money/date math. No React Native imports so it runs under `node --test`.
-import type { DisplayStatus, InvoiceDocument, LineItem } from './types';
+import type { DisplayStatus, InvoiceDocument, LineItem, RecurrenceFrequency } from './types';
 
 export type Totals = {
   subtotal: number;
@@ -96,4 +96,58 @@ export function daysBetween(fromISO: string, toISO: string): number {
 
 export function formatDocNumber(prefix: string, n: number): string {
   return `${prefix}${String(n).padStart(4, '0')}`;
+}
+
+/** Adds months, clamping to the last day of the target month (Jan 31 + 1 month = Feb 28). */
+export function addMonths(iso: string, months: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const target = new Date(y, m - 1 + months, 1);
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return todayISO(new Date(target.getFullYear(), target.getMonth(), Math.min(d, lastDay)));
+}
+
+/** Issue date of the nth occurrence of a recurring invoice (n = 0 is the anchor). */
+export function recurrenceDate(anchor: string, frequency: RecurrenceFrequency, n: number): string {
+  switch (frequency) {
+    case 'weekly':
+      return addDays(anchor, 7 * n);
+    case 'biweekly':
+      return addDays(anchor, 14 * n);
+    case 'monthly':
+      return addMonths(anchor, n);
+    case 'quarterly':
+      return addMonths(anchor, 3 * n);
+    case 'yearly':
+      return addMonths(anchor, 12 * n);
+  }
+}
+
+/** Calendar date (YYYY-MM-DD) and hour for an instant in an IANA time zone. */
+export function localDateParts(now: Date, timeZone = 'UTC'): { date: string; hour: number } {
+  let zone = timeZone;
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+  } catch {
+    zone = 'UTC';
+  }
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value])
+  );
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+
+/** First occurrence on or after `today` (n >= 1), so enabling a schedule never back-fills the past. */
+export function nextOccurrence(anchor: string, frequency: RecurrenceFrequency, today: string): { count: number; nextIssueDate: string } {
+  let n = 1;
+  while (recurrenceDate(anchor, frequency, n) < today && n < 10_000) n++;
+  return { count: n - 1, nextIssueDate: recurrenceDate(anchor, frequency, n) };
 }

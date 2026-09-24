@@ -23,7 +23,11 @@ export type ProFeature =
   | 'signature'
   | 'convert'
   | 'duplicate'
-  | 'branding';
+  | 'branding'
+  | 'onlinePayments'
+  | 'reminders'
+  | 'recurring'
+  | 'cloud';
 
 export const PRO_FEATURES: { key: ProFeature; title: string; detail: string }[] = [
   { key: 'unlimited', title: 'Unlimited invoices & estimates', detail: 'No caps, ever.' },
@@ -35,6 +39,10 @@ export const PRO_FEATURES: { key: ProFeature; title: string; detail: string }[] 
   { key: 'catalog', title: 'Saved items & services', detail: 'Build invoices in seconds.' },
   { key: 'duplicate', title: 'Duplicate documents', detail: 'Repeat work without retyping.' },
   { key: 'reports', title: 'Revenue reports', detail: 'Cash flow, aging and top clients.' },
+  { key: 'onlinePayments', title: 'Get paid online', detail: 'Clients pay by card with one tap. Invoices mark themselves paid.' },
+  { key: 'reminders', title: 'Automatic reminders', detail: 'Polite nudges before and after the due date.' },
+  { key: 'recurring', title: 'Recurring invoices', detail: 'Bill retainers automatically every week, month or year.' },
+  { key: 'cloud', title: 'Cloud sync & backup', detail: 'Your data on every device, never lost.' },
 ];
 
 type SubscriptionState = {
@@ -57,6 +65,12 @@ export const useSubscription = create<SubscriptionState>()((set) => ({
 
 export function useIsPro(): boolean {
   return useSubscription((s) => s.hasEntitlement || (__DEV__ && s.devPro));
+}
+
+/** Non-hook version for use outside components. */
+export function isProNow(): boolean {
+  const s = useSubscription.getState();
+  return s.hasEntitlement || (__DEV__ && s.devPro);
 }
 
 function apiKey(): string | undefined {
