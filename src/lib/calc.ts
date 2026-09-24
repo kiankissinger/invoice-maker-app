@@ -1,0 +1,99 @@
+// Pure money/date math. No React Native imports so it runs under `node --test`.
+import type { DisplayStatus, InvoiceDocument, LineItem } from './types';
+
+export type Totals = {
+  subtotal: number;
+  discount: number;
+  taxableBase: number;
+  tax: number;
+  shipping: number;
+  total: number;
+  paid: number;
+  balance: number;
+};
+
+export function roundMoney(value: number): number {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+export function lineTotal(item: Pick<LineItem, 'quantity' | 'unitPrice'>): number {
+  return roundMoney((item.quantity || 0) * (item.unitPrice || 0));
+}
+
+export function computeTotals(
+  doc: Pick<InvoiceDocument, 'items' | 'discount' | 'taxRate' | 'shipping' | 'payments'>
+): Totals {
+  const subtotal = roundMoney(doc.items.reduce((sum, item) => sum + lineTotal(item), 0));
+  const taxableSubtotal = doc.items
+    .filter((item) => item.taxable)
+    .reduce((sum, item) => sum + lineTotal(item), 0);
+
+  const rawDiscount =
+    doc.discount.kind === 'percent'
+      ? (subtotal * clamp(doc.discount.value, 0, 100)) / 100
+      : Math.max(0, doc.discount.value);
+  const discount = roundMoney(Math.min(rawDiscount, subtotal));
+
+  // Spread the discount across line items proportionally so only the taxable share is taxed.
+  const taxableBase =
+    subtotal > 0 ? roundMoney(taxableSubtotal - (discount * taxableSubtotal) / subtotal) : 0;
+  const tax = roundMoney((taxableBase * Math.max(0, doc.taxRate)) / 100);
+  const shipping = roundMoney(Math.max(0, doc.shipping));
+  const total = roundMoney(subtotal - discount + tax + shipping);
+  const paid = roundMoney(doc.payments.reduce((sum, p) => sum + p.amount, 0));
+  const balance = roundMoney(total - paid);
+
+  return { subtotal, discount, taxableBase, tax, shipping, total, paid, balance };
+}
+
+export function displayStatus(doc: InvoiceDocument, today: string = todayISO()): DisplayStatus {
+  if (doc.type === 'estimate') return doc.status as DisplayStatus;
+  if (doc.status === 'void') return 'void';
+
+  const { total, paid, balance } = computeTotals(doc);
+  if (total > 0 && balance <= 0) return 'paid';
+  if (doc.status === 'draft' && paid === 0) return 'draft';
+  if (doc.dueDate && doc.dueDate < today) return 'overdue';
+  if (paid > 0) return 'partial';
+  return 'sent';
+}
+
+export function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+/** Parses user-entered numbers, tolerating currency symbols and thousands separators. */
+export function parseAmount(text: string): number {
+  const cleaned = text.replace(/[^0-9.-]/g, '');
+  const value = Number.parseFloat(cleaned);
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function todayISO(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function addDays(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return todayISO(new Date(y, m - 1, d + days));
+}
+
+export function isValidISODate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d;
+}
+
+export function daysBetween(fromISO: string, toISO: string): number {
+  const [y1, m1, d1] = fromISO.split('-').map(Number);
+  const [y2, m2, d2] = toISO.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+}
+
+export function formatDocNumber(prefix: string, n: number): string {
+  return `${prefix}${String(n).padStart(4, '0')}`;
+}

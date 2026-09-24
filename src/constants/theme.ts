@@ -14,6 +14,12 @@ export const Colors = {
     backgroundElement: '#F0F0F3',
     backgroundSelected: '#E0E1E6',
     textSecondary: '#60646C',
+    tint: '#2563EB',
+    onTint: '#ffffff',
+    border: '#E4E4E9',
+    danger: '#DC2626',
+    success: '#16A34A',
+    warning: '#D97706',
   },
   dark: {
     text: '#ffffff',
@@ -21,8 +27,16 @@ export const Colors = {
     backgroundElement: '#212225',
     backgroundSelected: '#2E3135',
     textSecondary: '#B0B4BA',
+    tint: '#60A5FA',
+    onTint: '#0B1220',
+    border: '#2E3135',
+    danger: '#F87171',
+    success: '#4ADE80',
+    warning: '#FBBF24',
   },
 } as const;
+
+export const APP_NAME = 'Invoice Maker';
 
 export type ThemeColor = keyof typeof Colors.light & keyof typeof Colors.dark;
 

@@ -1,14 +1,16 @@
 {
   "expo": {
-    "name": "invoice-maker-app",
+    "name": "Invoice Maker",
     "slug": "invoice-maker-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "invoicemakerapp",
+    "scheme": "invoicemaker",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "icon": "./assets/expo.icon",
+      "bundleIdentifier": "com.example.invoicemaker",
+      "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
@@ -17,10 +19,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.example.invoicemaker"
     },
     "web": {
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
