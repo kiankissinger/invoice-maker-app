@@ -8,7 +8,9 @@ import { useProGate } from '@/hooks/use-pro-gate';
 import { useTheme } from '@/hooks/use-theme';
 import { CURRENCIES } from '@/lib/format';
 import { TEMPLATES } from '@/lib/pdf';
+import { useAccount } from '@/lib/account';
 import { useSubscription } from '@/lib/purchases';
+import { useSyncStatus } from '@/lib/sync';
 import { useStore } from '@/lib/store';
 
 const ACCENTS = ['#2563EB', '#0F766E', '#7C3AED', '#DB2777', '#EA580C', '#111827', '#15803D', '#B91C1C'];
@@ -19,6 +21,9 @@ export default function SettingsTab() {
   const update = useStore((s) => s.updateProfile);
   const { isPro, requirePro } = useProGate();
   const devPro = useSubscription((s) => s.devPro);
+  const user = useAccount((s) => s.user);
+  const chargesEnabled = useAccount((s) => s.me?.payments.chargesEnabled);
+  const lastSyncedAt = useSyncStatus((s) => s.lastSyncedAt);
 
   return (
     <Screen>
@@ -35,6 +40,22 @@ export default function SettingsTab() {
       <Section title="Your business">
         <ListRow icon="business-outline" title={profile.name || 'Business profile'} subtitle="Logo, contact details, payment instructions" onPress={() => router.push('/business')} />
         <ListRow icon="pricetags-outline" title="Saved items & services" right={!isPro ? <ProBadge /> : undefined} last onPress={() => requirePro('catalog') && router.push('/catalog')} />
+      </Section>
+
+      <Section title="Cloud & payments" action={!isPro ? <ProBadge /> : undefined}>
+        <ListRow
+          icon="cloud-outline"
+          title={user ? user.email : 'Sign in'}
+          subtitle={user ? (lastSyncedAt ? `Synced ${new Date(lastSyncedAt).toLocaleTimeString()}` : 'Account & sync') : 'Sync, backup and sending from the cloud'}
+          onPress={() => router.push('/account')}
+        />
+        <ListRow
+          icon="card-outline"
+          title="Online payments & reminders"
+          subtitle={chargesEnabled ? 'Stripe connected' : 'Get paid by card, remind clients automatically'}
+          last
+          onPress={() => requirePro('onlinePayments') && router.push('/payments')}
+        />
       </Section>
 
       <Section title="Look & feel" action={!isPro ? <ProBadge /> : undefined}>

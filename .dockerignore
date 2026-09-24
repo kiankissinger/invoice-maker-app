@@ -1,0 +1,8 @@
+**/node_modules
+**/dist
+.expo
+.git
+ios
+android
+assets
+docs

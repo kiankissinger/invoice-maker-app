@@ -1,6 +1,9 @@
 import { router } from 'expo-router';
 import { useCallback } from 'react';
+import { Alert } from 'react-native';
 
+import { useAccount } from '@/lib/account';
+import { apiConfigured } from '@/lib/api';
 import { FREE_DOCUMENT_LIMIT, useIsPro, type ProFeature } from '@/lib/purchases';
 import { useStore } from '@/lib/store';
 
@@ -27,9 +30,30 @@ export function useProGate() {
     return false;
   }, [isPro, documentsCreated]);
 
+  const signedIn = useAccount((s) => s.user !== null);
+
+  /** Pro + a server + a signed-in account: needed for sync, payments, sending and reminders. */
+  const requireCloud = useCallback(
+    (feature: ProFeature) => {
+      if (!requirePro(feature)) return false;
+      if (!apiConfigured()) {
+        Alert.alert('Server not configured', 'Set EXPO_PUBLIC_API_URL to your server to use cloud features.');
+        return false;
+      }
+      if (!signedIn) {
+        router.push('/account');
+        return false;
+      }
+      return true;
+    },
+    [requirePro, signedIn]
+  );
+
   return {
     isPro,
     requirePro,
+    requireCloud,
+    signedIn,
     canCreateDocument,
     freeDocumentsLeft: Math.max(0, FREE_DOCUMENT_LIMIT - documentsCreated),
   };

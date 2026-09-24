@@ -4,12 +4,16 @@ import { test } from 'node:test';
 
 import {
   addDays,
+  addMonths,
   computeTotals,
   daysBetween,
   displayStatus,
   formatDocNumber,
   isValidISODate,
+  localDateParts,
+  nextOccurrence,
   parseAmount,
+  recurrenceDate,
 } from './calc.ts';
 import type { InvoiceDocument } from './types.ts';
 
@@ -108,4 +112,28 @@ test('date helpers', () => {
 test('pads document numbers', () => {
   assert.equal(formatDocNumber('INV', 7), 'INV0007');
   assert.equal(formatDocNumber('EST-', 12345), 'EST-12345');
+});
+
+test('month math clamps to month end without drifting', () => {
+  assert.equal(addMonths('2026-01-31', 1), '2026-02-28');
+  assert.equal(addMonths('2028-01-31', 1), '2028-02-29');
+  assert.equal(addMonths('2026-11-15', 3), '2027-02-15');
+  assert.equal(recurrenceDate('2026-01-31', 'monthly', 1), '2026-02-28');
+  assert.equal(recurrenceDate('2026-01-31', 'monthly', 2), '2026-03-31');
+  assert.equal(recurrenceDate('2026-01-01', 'biweekly', 2), '2026-01-29');
+  assert.equal(recurrenceDate('2026-02-15', 'quarterly', 1), '2026-05-15');
+  assert.equal(recurrenceDate('2024-02-29', 'yearly', 1), '2025-02-28');
+});
+
+test('local date parts respect the time zone', () => {
+  const instant = new Date('2026-03-01T03:30:00Z');
+  assert.deepEqual(localDateParts(instant, 'UTC'), { date: '2026-03-01', hour: 3 });
+  assert.deepEqual(localDateParts(instant, 'America/Los_Angeles'), { date: '2026-02-28', hour: 19 });
+  assert.deepEqual(localDateParts(instant, 'Not/AZone'), { date: '2026-03-01', hour: 3 });
+});
+
+test('nextOccurrence skips past dates', () => {
+  assert.deepEqual(nextOccurrence('2026-01-15', 'monthly', '2026-01-20'), { count: 0, nextIssueDate: '2026-02-15' });
+  assert.deepEqual(nextOccurrence('2026-01-15', 'monthly', '2026-05-15'), { count: 3, nextIssueDate: '2026-05-15' });
+  assert.deepEqual(nextOccurrence('2026-01-01', 'weekly', '2026-01-02'), { count: 0, nextIssueDate: '2026-01-08' });
 });

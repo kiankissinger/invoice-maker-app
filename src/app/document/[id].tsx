@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { DeliveryPanel, RecurrencePanel } from '@/components/cloud-panels';
 import { NumberField } from '@/components/number-field';
 import {
   AppText,
@@ -133,6 +134,8 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
         </Row>
       </Card>
 
+      <DeliveryPanel doc={doc} />
+
       <Section title="Client">
         <ListRow
           icon="person-circle-outline"
@@ -257,6 +260,8 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
           />
         </Section>
       ) : null}
+
+      {isInvoice ? <RecurrencePanel doc={doc} /> : null}
 
       <Section title="Notes & terms">
         <Field label="Notes" value={doc.notes} onChangeText={(notes) => patch({ notes })} multiline />

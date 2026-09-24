@@ -37,6 +37,31 @@ export type Payment = {
   amount: number;
   method: PaymentMethod;
   note?: string;
+  /** 'stripe' payments are written by the server when a client pays online. */
+  source?: 'manual' | 'stripe';
+};
+
+export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+
+export type Recurrence = {
+  active: boolean;
+  frequency: RecurrenceFrequency;
+  /** Issue date of the first occurrence; later dates are computed from it so month-ends don't drift. */
+  anchorDate: string;
+  /** Occurrences generated so far (the original invoice is occurrence 0). */
+  count: number;
+  nextIssueDate: string;
+  endDate?: string;
+  /** Email each new invoice to the client automatically. */
+  autoSend: boolean;
+};
+
+export type ReminderSettings = {
+  enabled: boolean;
+  daysBefore: number; // 0 = off
+  onDueDate: boolean;
+  everyDaysAfter: number; // 0 = off
+  maxAfter: number;
 };
 
 export type Signature = {
@@ -67,6 +92,15 @@ export type InvoiceDocument = {
   templateId: TemplateId;
   convertedFromId?: string;
   convertedToId?: string;
+  /** Hosted invoice link (set once the document has been shared through the server). */
+  shareUrl?: string;
+  sentAt?: string; // ISO timestamp of the last email send
+  lastSentTo?: string;
+  viewedAt?: string; // ISO timestamp the client first opened the hosted link
+  remindersEnabled?: boolean; // default true
+  allowOnlinePayment?: boolean; // default true
+  recurrence?: Recurrence;
+  recurringParentId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -80,6 +114,7 @@ export type Client = {
   address?: string;
   notes?: string;
   createdAt: string;
+  updatedAt?: string;
 };
 
 export type CatalogItem = {
@@ -89,6 +124,7 @@ export type CatalogItem = {
   unitPrice: number;
   unit?: string;
   taxable: boolean;
+  updatedAt?: string;
 };
 
 export type BusinessProfile = {
@@ -113,4 +149,20 @@ export type BusinessProfile = {
   nextInvoiceNumber: number;
   nextEstimateNumber: number;
   templateId: TemplateId;
+  reminders: ReminderSettings;
+  /** IANA zone, used by the server to send reminders at a sensible local time. */
+  timeZone?: string;
+  /** Unset until the user first edits their profile, so a fresh device never overwrites the cloud copy. */
+  updatedAt?: string;
+};
+
+/** Record kinds exchanged with the sync server. */
+export type SyncType = 'document' | 'client' | 'catalog' | 'profile';
+
+export type SyncChange = {
+  type: SyncType;
+  id: string;
+  updatedAt: string;
+  deleted: boolean;
+  data: unknown;
 };

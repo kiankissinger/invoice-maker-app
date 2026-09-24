@@ -24,7 +24,12 @@ A mobile invoice and estimate app for iOS and Android, built with Expo and React
 - **Dashboard:** outstanding, overdue and paid-this-month totals, search, and status filters.
 - **Reports:** invoiced versus collected over the last 6 months, unpaid invoices grouped by how late they are, top clients, and the value of open estimates.
 - **Business profile:** logo, tax ID, payment instructions, 20 currencies, and document prefixes and numbering.
-- Works offline and supports dark mode. Data stays on the device.
+- **Cloud sync and backup** across devices, with passwordless email sign-in. The app still works fully offline.
+- **Email invoices from the app.** The client gets a link to view the invoice, download a PDF and **pay by card**. Payments go through Stripe Connect into your own account, and the invoice is marked paid automatically.
+- **"Client viewed your invoice"** and **"Payment received"** push notifications.
+- **Automatic payment reminders** before the due date, on it, and every N days after, sent during the client's business hours.
+- **Recurring invoices** (weekly to yearly), which can be emailed to the client automatically.
+- Dark mode.
 
 ## Free vs Pro
 
@@ -40,6 +45,10 @@ A mobile invoice and estimate app for iOS and Android, built with Expo and React
 | Saved items catalog | | ✓ |
 | Duplicate documents | | ✓ |
 | Reports | | ✓ |
+| Cloud sync and backup | | ✓ |
+| Email invoices, hosted link, online card payments | | ✓ |
+| Automatic reminders | | ✓ |
+| Recurring invoices | | ✓ |
 
 The limits are defined in `src/lib/purchases.ts` (`FREE_DOCUMENT_LIMIT`, `PRO_FEATURES`). The checks are in `src/hooks/use-pro-gate.ts`. When a free user reaches a limit, the paywall opens and highlights the feature they tried to use.
 
@@ -50,6 +59,7 @@ The limits are defined in `src/lib/purchases.ts` (`FREE_DOCUMENT_LIMIT`, `PRO_FE
 - Zustand, saved to AsyncStorage, for local data
 - `expo-print` and `expo-sharing` for PDFs, and `react-native-svg` for signatures
 - RevenueCat (`react-native-purchases`) for subscriptions and free trials on both stores
+- **Backend (`server/`)**: Node 22, Express and Postgres, deployed on Railway, with Stripe Connect, Resend for email and Expo push notifications. See [`server/README.md`](server/README.md).
 
 ## Getting started
 
@@ -82,6 +92,14 @@ In development builds, **Settings → Developer → Simulate Pro** turns on ever
    EXPO_PUBLIC_REVENUECAT_ANDROID_KEY=goog_...
    ```
 
+## Cloud features
+
+1. Deploy the server by following [`server/README.md`](server/README.md). It covers Railway, Postgres, Resend, Stripe Connect and RevenueCat.
+2. Set `EXPO_PUBLIC_API_URL` in `.env.local` to the server's URL.
+3. Run `npx eas-cli@latest init` so push notifications have a `projectId`.
+
+If `EXPO_PUBLIC_API_URL` isn't set, the app works exactly as before: offline, on the device only.
+
 The paywall loads the current offering, selects the annual plan by default, and shows the trial length from the store's intro offer. It also includes Restore Purchases, which Apple requires.
 
 ## Project structure
@@ -98,27 +116,29 @@ src/
     catalog.tsx           saved items (manage, or pick with ?docId=)
     business.tsx          business profile & logo
     paywall.tsx           subscription paywall
-  components/             UI primitives, number field, signature pad, list screen
-  hooks/                  theme, Pro gate
+    account.tsx           sign in / sync status / delete account
+    payments.tsx          Stripe Connect + reminder settings
+    send.tsx              modal: email a document to the client
+  components/             UI primitives, number field, signature pad, list screen, cloud panels
+  hooks/                  theme, Pro/cloud gate
   lib/
-    calc.ts               pure totals, status and date math (+ calc.test.ts)
-    store.ts              persisted Zustand store and all mutations
+    calc.ts               pure totals, status, date and recurrence math (+ calc.test.ts)
+    store.ts              persisted Zustand store, mutations, sync merge
+    invoice-html.ts       pure HTML templates (shared with the server)
+    pdf.ts                PDF preview and share
+    api.ts / account.ts   API client and session (token in SecureStore)
+    sync.ts               offline-first sync engine (push, pull, newer edit wins)
+    notifications.ts      Expo push registration and tap handling
     purchases.ts          RevenueCat wrapper, entitlement and free-tier limits
-    pdf.ts                HTML → PDF templates, preview and share
     types.ts              domain model
+server/                   API, background jobs and tests (see server/README.md)
 ```
 
 ## Roadmap
 
-These are the planned features for a clear lead over other invoice apps:
-
-- **Cloud sync and backup** across devices, with an account (for example Supabase or Firebase).
-- **Online payments:** a "Pay now" link on every invoice through Stripe Payment Links, with invoices marked paid automatically by webhook.
-- **Automatic reminders** through push notifications before and after the due date, plus reminder emails to clients.
-- **Recurring invoices** (weekly, monthly or yearly retainers).
 - **Expenses and receipt scanning** with OCR, and profit reports.
 - **Time tracking** that turns tracked hours into line items.
-- **Invoice read tracking** ("client viewed your invoice").
+- **Deposits and partial payment requests** on estimates, paid online.
 - **CSV and PDF export** of reports for accountants, and QuickBooks and Xero export.
 - **Multiple businesses** per account and team members.
 - **Localization** and per-country tax presets (VAT, GST, HST).

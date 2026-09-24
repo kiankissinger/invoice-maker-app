@@ -12,6 +12,8 @@ import type {
   InvoiceDocument,
   LineItem,
   Payment,
+  SyncChange,
+  SyncType,
 } from './types';
 
 export const newId = () => randomUUID();
@@ -37,7 +39,18 @@ export const DEFAULT_PROFILE: BusinessProfile = {
   nextInvoiceNumber: 1,
   nextEstimateNumber: 1,
   templateId: 'classic',
+  reminders: { enabled: true, daysBefore: 3, onDueDate: true, everyDaysAfter: 7, maxAfter: 3 },
 };
+
+const nowISO = () => new Date().toISOString();
+const deviceTimeZone = () => {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+};
+const key = (type: SyncType, id: string) => `${type}:${id}`;
 
 export function emptyLineItem(): LineItem {
   return { id: newId(), description: '', quantity: 1, unitPrice: 0, taxable: true };
@@ -51,6 +64,9 @@ type State = {
   catalog: Record<string, CatalogItem>;
   /** Lifetime count; drives the free-tier limit so deleting documents doesn't reset it. */
   documentsCreated: number;
+  /** "type:id" -> deletion time, so deletes can be synced. */
+  tombstones: Record<string, string>;
+  syncMeta: { cursor: number; pushedUpTo: string | null };
 };
 
 type Actions = {
@@ -67,6 +83,11 @@ type Actions = {
   upsertCatalogItem: (item: Omit<CatalogItem, 'id'> & { id?: string }) => CatalogItem;
   deleteCatalogItem: (id: string) => void;
   resetAll: () => void;
+  /** Local changes made after `since` (everything when null), for pushing to the server. */
+  collectChanges: (since: string | null) => SyncChange[];
+  /** Merges server changes, keeping any local copy that is newer. */
+  applyRemote: (changes: SyncChange[]) => void;
+  setSyncMeta: (meta: Partial<State['syncMeta']>) => void;
 };
 
 const initialData = {
@@ -75,6 +96,8 @@ const initialData = {
   clients: {},
   catalog: {},
   documentsCreated: 0,
+  tombstones: {},
+  syncMeta: { cursor: 0, pushedUpTo: null },
 };
 
 export const useStore = create<State & Actions>()(
@@ -84,10 +107,10 @@ export const useStore = create<State & Actions>()(
       const takeNumber = (type: DocType): string => {
         const { profile } = get();
         if (type === 'invoice') {
-          set({ profile: { ...profile, nextInvoiceNumber: profile.nextInvoiceNumber + 1 } });
+          set({ profile: { ...profile, nextInvoiceNumber: profile.nextInvoiceNumber + 1, updatedAt: nowISO() } });
           return formatDocNumber(profile.invoicePrefix, profile.nextInvoiceNumber);
         }
-        set({ profile: { ...profile, nextEstimateNumber: profile.nextEstimateNumber + 1 } });
+        set({ profile: { ...profile, nextEstimateNumber: profile.nextEstimateNumber + 1, updatedAt: nowISO() } });
         return formatDocNumber(profile.estimatePrefix, profile.nextEstimateNumber);
       };
 
@@ -101,7 +124,8 @@ export const useStore = create<State & Actions>()(
         hydrated: false,
         ...initialData,
 
-        updateProfile: (patch) => set((s) => ({ profile: { ...s.profile, ...patch } })),
+        updateProfile: (patch) =>
+          set((s) => ({ profile: { ...s.profile, ...patch, timeZone: deviceTimeZone(), updatedAt: nowISO() } })),
 
         createDocument: (type, init) => {
           const { profile } = get();
@@ -147,7 +171,7 @@ export const useStore = create<State & Actions>()(
         deleteDocument: (id) =>
           set((s) => {
             const { [id]: _removed, ...rest } = s.documents;
-            return { documents: rest };
+            return { documents: rest, tombstones: { ...s.tombstones, [key('document', id)]: nowISO() } };
           }),
 
         duplicateDocument: (id) => {
@@ -167,6 +191,12 @@ export const useStore = create<State & Actions>()(
             signature: undefined,
             convertedFromId: undefined,
             convertedToId: undefined,
+            shareUrl: undefined,
+            sentAt: undefined,
+            lastSentTo: undefined,
+            viewedAt: undefined,
+            recurrence: undefined,
+            recurringParentId: undefined,
             createdAt: now,
             updatedAt: now,
           };
@@ -219,7 +249,8 @@ export const useStore = create<State & Actions>()(
             ...existing,
             ...input,
             id: existing?.id ?? newId(),
-            createdAt: existing?.createdAt ?? new Date().toISOString(),
+            createdAt: existing?.createdAt ?? nowISO(),
+            updatedAt: nowISO(),
           };
           set((s) => ({ clients: { ...s.clients, [client.id]: client } }));
           return client;
@@ -228,11 +259,11 @@ export const useStore = create<State & Actions>()(
         deleteClient: (id) =>
           set((s) => {
             const { [id]: _removed, ...rest } = s.clients;
-            return { clients: rest };
+            return { clients: rest, tombstones: { ...s.tombstones, [key('client', id)]: nowISO() } };
           }),
 
         upsertCatalogItem: (input) => {
-          const item: CatalogItem = { ...input, id: input.id ?? newId() };
+          const item: CatalogItem = { ...input, id: input.id ?? newId(), updatedAt: nowISO() };
           set((s) => ({ catalog: { ...s.catalog, [item.id]: item } }));
           return item;
         },
@@ -240,16 +271,90 @@ export const useStore = create<State & Actions>()(
         deleteCatalogItem: (id) =>
           set((s) => {
             const { [id]: _removed, ...rest } = s.catalog;
-            return { catalog: rest };
+            return { catalog: rest, tombstones: { ...s.tombstones, [key('catalog', id)]: nowISO() } };
           }),
 
         resetAll: () => set({ ...initialData }),
+
+        collectChanges: (since) => {
+          const { documents, clients, catalog, profile, tombstones } = get();
+          const newer = (updatedAt?: string) => !!updatedAt && (!since || updatedAt > since);
+          const changes: SyncChange[] = [];
+          const add = (type: SyncType, items: Record<string, { id: string; updatedAt?: string }>) => {
+            for (const item of Object.values(items)) {
+              if (newer(item.updatedAt)) changes.push({ type, id: item.id, updatedAt: item.updatedAt!, deleted: false, data: item });
+            }
+          };
+          add('document', documents);
+          add('client', clients);
+          add('catalog', catalog);
+          if (newer(profile.updatedAt)) {
+            changes.push({ type: 'profile', id: 'profile', updatedAt: profile.updatedAt!, deleted: false, data: { ...profile, id: 'profile' } });
+          }
+          for (const [k, deletedAt] of Object.entries(tombstones)) {
+            if (!newer(deletedAt)) continue;
+            const [type, ...rest] = k.split(':');
+            changes.push({ type: type as SyncType, id: rest.join(':'), updatedAt: deletedAt, deleted: true, data: null });
+          }
+          return changes;
+        },
+
+        applyRemote: (changes) =>
+          set((s) => {
+            const documents = { ...s.documents };
+            const clients = { ...s.clients };
+            const catalog = { ...s.catalog };
+            const tombstones = { ...s.tombstones };
+            let profile = s.profile;
+            const tables: Record<Exclude<SyncType, 'profile'>, Record<string, { updatedAt?: string }>> = {
+              document: documents,
+              client: clients,
+              catalog,
+            };
+
+            for (const change of changes) {
+              const k = key(change.type, change.id);
+              const local = change.type === 'profile' ? profile : tables[change.type][change.id];
+              // A newer local edit or delete wins; it will be pushed on the next sync.
+              if (local?.updatedAt && local.updatedAt > change.updatedAt) continue;
+              if (tombstones[k] && tombstones[k] > change.updatedAt) continue;
+
+              if (change.type === 'profile') {
+                if (!change.deleted) {
+                  const { id: _id, ...data } = change.data as BusinessProfile & { id?: string };
+                  profile = { ...DEFAULT_PROFILE, ...data };
+                }
+              } else if (change.deleted) {
+                delete tables[change.type][change.id];
+              } else {
+                tables[change.type][change.id] = change.data as { updatedAt?: string };
+              }
+              delete tombstones[k];
+            }
+            return { documents, clients, catalog, profile, tombstones };
+          }),
+
+        setSyncMeta: (meta) => set((s) => ({ syncMeta: { ...s.syncMeta, ...meta } })),
       };
     },
     {
       name: 'invoice-maker-store',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => AsyncStorage),
+      migrate: (persisted, version) => {
+        const state = persisted as State;
+        if (version < 2) {
+          // v2 adds sync: stamp existing clients/items so they get uploaded on first sync.
+          const stamp = <T extends { updatedAt?: string }>(items: Record<string, T> = {}) =>
+            Object.fromEntries(Object.entries(items).map(([id, item]) => [id, { ...item, updatedAt: item.updatedAt ?? nowISO() }]));
+          state.clients = stamp(state.clients);
+          state.catalog = stamp(state.catalog);
+          state.tombstones = {};
+          state.syncMeta = { cursor: 0, pushedUpTo: null };
+          if (state.profile && (state.profile.name || state.profile.email)) state.profile.updatedAt = nowISO();
+        }
+        return state;
+      },
       partialize: ({ hydrated: _hydrated, ...rest }) => rest,
       merge: (persisted, current) => {
         const saved = (persisted ?? {}) as Partial<State>;
