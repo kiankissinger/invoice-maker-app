@@ -106,7 +106,7 @@ In development builds, **Settings → Developer → Simulate Pro** turns on ever
 ## Cloud features
 
 1. Deploy the server by following [`server/README.md`](server/README.md). It covers Railway, Postgres, Resend, Stripe Connect and RevenueCat.
-2. Set `EXPO_PUBLIC_API_URL` in `.env.local` to the server's URL.
+2. Point the app at the server with `EXPO_PUBLIC_API_URL`. It is already set in `eas.json` for every build profile (`https://api-production-d6d0.up.railway.app`); for `npm start`, copy `.env.example` to `.env.local`.
 3. Run `npx eas-cli@latest init` so push notifications have a `projectId`.
 
 If `EXPO_PUBLIC_API_URL` isn't set, the app works exactly as before: offline, on the device only.
