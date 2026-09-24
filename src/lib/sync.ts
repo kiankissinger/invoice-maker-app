@@ -79,7 +79,7 @@ export function startAutoSync(): () => void {
   };
 
   const unsubStore = useStore.subscribe((state, prev) => {
-    if (state.documents !== prev.documents || state.clients !== prev.clients || state.catalog !== prev.catalog || state.profile !== prev.profile || state.tombstones !== prev.tombstones) {
+    if (state.documents !== prev.documents || state.clients !== prev.clients || state.catalog !== prev.catalog || state.expenses !== prev.expenses || state.profile !== prev.profile || state.tombstones !== prev.tombstones) {
       schedule(3000);
     }
   });

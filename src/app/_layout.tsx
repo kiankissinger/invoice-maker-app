@@ -58,6 +58,8 @@ export default function RootLayout() {
         <Stack.Screen name="signature" options={{ presentation: 'modal', title: 'Signature' }} />
         <Stack.Screen name="account" options={{ title: 'Account' }} />
         <Stack.Screen name="payments" options={{ title: 'Payments & reminders' }} />
+        <Stack.Screen name="ai-draft" options={{ presentation: 'modal', title: 'Describe the job' }} />
+        <Stack.Screen name="expense/[id]" options={{ title: 'Expense' }} />
         <Stack.Screen name="send" options={{ presentation: 'modal', title: 'Email to client' }} />
         <Stack.Screen name="paywall" options={{ presentation: 'modal', headerShown: false }} />
       </Stack>

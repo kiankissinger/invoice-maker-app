@@ -19,6 +19,53 @@ export type TemplateId = 'classic' | 'modern' | 'minimal' | 'bold';
 
 export type Discount = { kind: 'percent' | 'amount'; value: number };
 
+/** Upfront amount requested before work starts (percent of total or fixed). */
+export type Deposit = { kind: 'percent' | 'amount'; value: number };
+
+export type Photo = {
+  id: string;
+  /** Compressed JPEG as a data URI, so it syncs and renders in PDFs without file hosting. */
+  uri: string;
+  caption?: string;
+};
+
+export type LateFeeSettings = {
+  enabled: boolean;
+  kind: 'percent' | 'amount';
+  value: number;
+  /** Days after the due date before the fee is added. */
+  graceDays: number;
+};
+
+export const EXPENSE_CATEGORIES = [
+  'Materials',
+  'Equipment',
+  'Fuel & travel',
+  'Meals',
+  'Software',
+  'Office',
+  'Subcontractors',
+  'Marketing',
+  'Insurance',
+  'Other',
+] as const;
+export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
+
+export type Expense = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  vendor: string;
+  amount: number;
+  tax?: number;
+  currency: string;
+  category: ExpenseCategory;
+  notes?: string;
+  clientId?: string;
+  receiptUri?: string; // compressed JPEG data URI
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type LineItem = {
   id: string;
   description: string;
@@ -84,6 +131,11 @@ export type InvoiceDocument = {
   taxRate: number; // percent
   taxLabel: string;
   shipping: number;
+  /** Tax withheld by the client (e.g. IRPF/retención), subtracted from the total. Percent. */
+  withholdingRate?: number;
+  withholdingLabel?: string;
+  deposit?: Deposit;
+  photos?: Photo[];
   notes: string;
   terms: string;
   payments: Payment[];
@@ -101,6 +153,9 @@ export type InvoiceDocument = {
   allowOnlinePayment?: boolean; // default true
   recurrence?: Recurrence;
   recurringParentId?: string;
+  /** Set when the client accepts an estimate from the hosted link. */
+  approval?: { name: string; at: string };
+  lateFeeAppliedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -150,6 +205,7 @@ export type BusinessProfile = {
   nextEstimateNumber: number;
   templateId: TemplateId;
   reminders: ReminderSettings;
+  lateFee: LateFeeSettings;
   /** IANA zone, used by the server to send reminders at a sensible local time. */
   timeZone?: string;
   /** Unset until the user first edits their profile, so a fresh device never overwrites the cloud copy. */
@@ -157,7 +213,7 @@ export type BusinessProfile = {
 };
 
 /** Record kinds exchanged with the sync server. */
-export type SyncType = 'document' | 'client' | 'catalog' | 'profile';
+export type SyncType = 'document' | 'client' | 'catalog' | 'profile' | 'expense';
 
 export type SyncChange = {
   type: SyncType;

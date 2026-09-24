@@ -3,6 +3,7 @@ import { useCallback } from 'react';
 import { Alert } from 'react-native';
 
 import { useAccount } from '@/lib/account';
+import { countThisMonth, todayISO } from '@/lib/calc';
 import { apiConfigured } from '@/lib/api';
 import { FREE_DOCUMENT_LIMIT, useIsPro, type ProFeature } from '@/lib/purchases';
 import { useStore } from '@/lib/store';
@@ -13,7 +14,7 @@ import { useStore } from '@/lib/store';
  */
 export function useProGate() {
   const isPro = useIsPro();
-  const documentsCreated = useStore((s) => s.documentsCreated);
+  const createdThisMonth = useStore((s) => countThisMonth(s.createdThisMonth, todayISO()));
 
   const requirePro = useCallback(
     (feature: ProFeature) => {
@@ -25,10 +26,10 @@ export function useProGate() {
   );
 
   const canCreateDocument = useCallback(() => {
-    if (isPro || documentsCreated < FREE_DOCUMENT_LIMIT) return true;
+    if (isPro || createdThisMonth < FREE_DOCUMENT_LIMIT) return true;
     router.push({ pathname: '/paywall', params: { feature: 'unlimited' } });
     return false;
-  }, [isPro, documentsCreated]);
+  }, [isPro, createdThisMonth]);
 
   const signedIn = useAccount((s) => s.user !== null);
 
@@ -55,6 +56,6 @@ export function useProGate() {
     requireCloud,
     signedIn,
     canCreateDocument,
-    freeDocumentsLeft: Math.max(0, FREE_DOCUMENT_LIMIT - documentsCreated),
+    freeDocumentsLeft: Math.max(0, FREE_DOCUMENT_LIMIT - createdThisMonth),
   };
 }

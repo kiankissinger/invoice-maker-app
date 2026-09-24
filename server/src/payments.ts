@@ -63,7 +63,7 @@ export async function handlePaymentEvent(ctx: Context, event: PaymentEvent): Pro
     date: localDateParts(ctx.now(), profile?.timeZone).date,
     amount: fromMinorUnits(event.amountMinor, event.currency),
     method: 'card',
-    note: 'Paid online',
+    note: event.metadata.kind === 'deposit' ? 'Deposit paid online' : 'Paid online',
     source: 'stripe',
   };
 
@@ -86,7 +86,7 @@ export async function handlePaymentEvent(ctx: Context, event: PaymentEvent): Pro
     ctx,
     userId,
     'Payment received 🎉',
-    `${client?.name ?? 'A client'} paid ${formatMoney(payment.amount, doc.currency)} on invoice ${doc.number}.`,
+    `${client?.name ?? 'A client'} paid ${formatMoney(payment.amount, doc.currency)}${event.metadata.kind === 'deposit' ? ' deposit' : ''} on ${doc.type} ${doc.number}.`,
     { docId }
   );
 }

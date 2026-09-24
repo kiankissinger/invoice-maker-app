@@ -69,7 +69,7 @@ export function documentEmail(params: {
     reminder_after: `Invoice ${doc.number} for ${amount} was due ${due} and is now past due.`,
   }[kind];
 
-  const cta = isInvoice ? (canPayOnline ? `View & pay ${amount}` : 'View invoice') : 'View estimate';
+  const cta = isInvoice ? (canPayOnline ? `View & pay ${amount}` : 'View invoice') : 'Review & approve estimate';
 
   const text = [
     greeting ? `Hi ${greeting},` : 'Hi,',

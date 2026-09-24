@@ -1,6 +1,6 @@
 // Pure HTML rendering for invoices/estimates. Shared by the app (PDF export) and the
 // server (hosted invoice page), so it must not import React Native or Expo modules.
-import { computeTotals, lineTotal } from './calc';
+import { computeTotals, depositStatus, lineTotal } from './calc';
 import { formatDate, formatMoney } from './format';
 import type { BusinessProfile, Client, InvoiceDocument, TemplateId } from './types';
 
@@ -77,6 +77,20 @@ export function renderDocumentHtml({ doc, client, profile, isPro, appName, bodyP
       </div>`
     : '';
 
+  const approval = doc.approval
+    ? `<div class="approval">✓ Accepted by ${escape(doc.approval.name)} on ${escape(formatDate(doc.approval.at.slice(0, 10)))}</div>`
+    : '';
+
+  const photos = (doc.photos ?? []).filter((p) => /^data:image\/(jpeg|png);base64,/.test(p.uri));
+  const photoGrid = photos.length
+    ? `<div class="photos"><div class="label">Photos</div><div class="grid">${photos
+        .map((p) => `<figure><img src="${escape(p.uri)}"/>${p.caption ? `<figcaption>${escape(p.caption)}</figcaption>` : ''}</figure>`)
+        .join('')}</div></div>`
+    : '';
+
+  const deposit = depositStatus(doc);
+  const paidSoFar = totals.paid > 0;
+
   const watermark = isPro
     ? ''
     : `<div class="watermark">Created with ${escape(appName)} — free plan</div>`;
@@ -116,6 +130,12 @@ export function renderDocumentHtml({ doc, client, profile, isPro, appName, bodyP
   .signature { margin-top: 24px; }
   .signature svg { border-bottom: 1px solid #9ca3af; }
   .watermark { margin-top: 40px; text-align: center; color: #9ca3af; font-size: 10px; }
+  .approval { margin-top: 12px; color: #16a34a; font-weight: 600; }
+  .photos { margin-top: 24px; page-break-inside: avoid; }
+  .photos .grid { display: flex; flex-wrap: wrap; gap: 10px; }
+  .photos figure { margin: 0; width: calc(33.33% - 7px); }
+  .photos img { display: block; width: 100%; height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid #e5e7eb; }
+  .photos figcaption { font-size: 10px; color: #6b7280; margin-top: 2px; }
   .paid-stamp { display: inline-block; border: 3px solid #16a34a; color: #16a34a; font-weight: 800; padding: 4px 12px; transform: rotate(-8deg); font-size: 18px; margin-top: 8px; }
 
   /* Templates */
@@ -184,17 +204,21 @@ export function renderDocumentHtml({ doc, client, profile, isPro, appName, bodyP
       ${doc.notes ? `<div class="block"><div class="label">Notes</div>${multiline(doc.notes)}</div>` : ''}
       ${doc.terms ? `<div class="block"><div class="label">Terms</div>${multiline(doc.terms)}</div>` : ''}
       ${signature}
+      ${approval}
     </div>
     <table class="totals">
       ${totalRow('Subtotal', money(totals.subtotal))}
       ${totals.discount ? totalRow(discountLabel, `−${money(totals.discount)}`) : ''}
       ${totals.tax ? totalRow(`${escape(doc.taxLabel)} (${doc.taxRate}%)`, money(totals.tax)) : ''}
       ${totals.shipping ? totalRow('Shipping', money(totals.shipping)) : ''}
+      ${totals.withholding ? totalRow(`${escape(doc.withholdingLabel || 'Withholding')} (${doc.withholdingRate}%)`, `−${money(totals.withholding)}`) : ''}
       ${totalRow('Total', money(totals.total), 'grand')}
-      ${doc.type === 'invoice' && totals.paid ? totalRow('Paid', `−${money(totals.paid)}`) : ''}
-      ${doc.type === 'invoice' && totals.paid ? totalRow('Balance due', money(totals.balance), 'due') : ''}
+      ${deposit.amount ? totalRow(`Deposit${doc.deposit?.kind === 'percent' ? ` (${doc.deposit.value}%)` : ''}`, money(deposit.amount)) : ''}
+      ${paidSoFar ? totalRow('Paid', `−${money(totals.paid)}`) : ''}
+      ${paidSoFar ? totalRow('Balance due', money(totals.balance), 'due') : ''}
     </table>
   </div>
+  ${photoGrid}
   ${watermark}
 </body>
 </html>`;

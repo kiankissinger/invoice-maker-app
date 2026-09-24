@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite';
 import request from 'supertest';
 
 import type { InvoiceDocument } from '../../src/lib/types';
+import type { AiService, DraftContext } from '../src/ai';
 import { createApp } from '../src/app';
 import type { Config } from '../src/config';
 import type { Context } from '../src/context';
@@ -45,9 +46,24 @@ export async function createTestContext(overrides: Partial<Config> = {}) {
   const checkouts: CheckoutParams[] = [];
   const proUsers = new Set<string>();
   const clock = { now: new Date('2026-09-24T15:00:00Z') };
+  const aiCalls: { receipts: string[]; drafts: DraftContext[] } = { receipts: [], drafts: [] };
+  const ai: AiService = {
+    scanReceipt: async ({ data }) => {
+      aiCalls.receipts.push(data);
+      return { vendor: 'Home Depot', date: '2026-09-23', total: 128.4, tax: 9.4, currency: 'USD', category: 'Materials' };
+    },
+    draftItems: async (context) => {
+      aiCalls.drafts.push(context);
+      return {
+        items: [{ description: 'Labor', details: null, quantity: 4, unitPrice: 85, unit: 'hrs', taxable: false }],
+        notes: null,
+      };
+    },
+  };
 
+  let accounts = 0;
   const payments: PaymentsGateway = {
-    createAccount: async () => 'acct_test_1',
+    createAccount: async () => `acct_test_${++accounts}`,
     onboardingLink: async (id) => `https://connect.stripe.com/setup/${id}`,
     getAccount: async () => ({ chargesEnabled: true, detailsSubmitted: true }),
     dashboardLink: async () => 'https://connect.stripe.com/express/dashboard',
@@ -73,6 +89,7 @@ export async function createTestContext(overrides: Partial<Config> = {}) {
     },
     payments,
     entitlements: { isPro: async (userId) => proUsers.has(userId) },
+    ai,
     now: () => clock.now,
   };
 
@@ -89,7 +106,7 @@ export async function createTestContext(overrides: Partial<Config> = {}) {
     return { token: res.body.token as string, user: res.body.user as { id: string; email: string }, auth };
   }
 
-  return { ctx, db, api, emails, pushes, checkouts, proUsers, clock, signIn, close: () => pg.close() };
+  return { ctx, db, api, emails, pushes, checkouts, proUsers, clock, aiCalls, signIn, close: () => pg.close() };
 }
 
 export function makeInvoice(overrides: Partial<InvoiceDocument> = {}): InvoiceDocument {

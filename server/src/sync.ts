@@ -5,7 +5,7 @@ import type { Context } from './context';
 import { getRecord, mergeServerOwned, toChange, writeRecord, type RecordRow } from './records';
 
 export const PAGE_SIZE = 500;
-const TYPES: [SyncType, ...SyncType[]] = ['document', 'client', 'catalog', 'profile'];
+const TYPES: [SyncType, ...SyncType[]] = ['document', 'client', 'catalog', 'profile', 'expense'];
 
 export const syncRequestSchema = z.object({
   cursor: z.number().int().min(0),

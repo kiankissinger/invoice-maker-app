@@ -7,6 +7,7 @@ export type Totals = {
   taxableBase: number;
   tax: number;
   shipping: number;
+  withholding: number;
   total: number;
   paid: number;
   balance: number;
@@ -21,7 +22,7 @@ export function lineTotal(item: Pick<LineItem, 'quantity' | 'unitPrice'>): numbe
 }
 
 export function computeTotals(
-  doc: Pick<InvoiceDocument, 'items' | 'discount' | 'taxRate' | 'shipping' | 'payments'>
+  doc: Pick<InvoiceDocument, 'items' | 'discount' | 'taxRate' | 'shipping' | 'payments' | 'withholdingRate'>
 ): Totals {
   const subtotal = roundMoney(doc.items.reduce((sum, item) => sum + lineTotal(item), 0));
   const taxableSubtotal = doc.items
@@ -39,11 +40,31 @@ export function computeTotals(
     subtotal > 0 ? roundMoney(taxableSubtotal - (discount * taxableSubtotal) / subtotal) : 0;
   const tax = roundMoney((taxableBase * Math.max(0, doc.taxRate)) / 100);
   const shipping = roundMoney(Math.max(0, doc.shipping));
-  const total = roundMoney(subtotal - discount + tax + shipping);
+  // Withholding applies to the net amount before tax and shipping.
+  const withholding = roundMoney(((subtotal - discount) * clamp(doc.withholdingRate ?? 0, 0, 100)) / 100);
+  const total = roundMoney(subtotal - discount + tax + shipping - withholding);
   const paid = roundMoney(doc.payments.reduce((sum, p) => sum + p.amount, 0));
   const balance = roundMoney(total - paid);
 
-  return { subtotal, discount, taxableBase, tax, shipping, total, paid, balance };
+  return { subtotal, discount, taxableBase, tax, shipping, withholding, total, paid, balance };
+}
+
+/** Requested deposit and how much of it is still unpaid (0 when no deposit is set). */
+export function depositStatus(doc: Pick<InvoiceDocument, 'items' | 'discount' | 'taxRate' | 'shipping' | 'payments' | 'withholdingRate' | 'deposit'>): {
+  amount: number;
+  outstanding: number;
+} {
+  if (!doc.deposit || doc.deposit.value <= 0) return { amount: 0, outstanding: 0 };
+  const { total, paid } = computeTotals(doc);
+  const amount = roundMoney(
+    doc.deposit.kind === 'percent' ? (total * clamp(doc.deposit.value, 0, 100)) / 100 : Math.min(doc.deposit.value, total)
+  );
+  return { amount, outstanding: roundMoney(Math.max(0, amount - paid)) };
+}
+
+/** Late fee for an overdue balance under the given settings. */
+export function lateFeeAmount(balance: number, kind: 'percent' | 'amount', value: number): number {
+  return roundMoney(kind === 'percent' ? (Math.max(0, balance) * Math.max(0, value)) / 100 : Math.max(0, value));
 }
 
 export function displayStatus(doc: InvoiceDocument, today: string = todayISO()): DisplayStatus {
@@ -92,6 +113,17 @@ export function daysBetween(fromISO: string, toISO: string): number {
   const [y1, m1, d1] = fromISO.split('-').map(Number);
   const [y2, m2, d2] = toISO.split('-').map(Number);
   return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+}
+
+/** Documents created so far in `today`'s calendar month (the counter resets when the month changes). */
+export function countThisMonth(counter: { month: string; count: number } | undefined, today: string): number {
+  return counter && counter.month === today.slice(0, 7) ? counter.count : 0;
+}
+
+/** First day of the month after `today`, when the free allowance resets. */
+export function nextMonthStart(today: string): string {
+  const [y, m] = today.split('-').map(Number);
+  return todayISO(new Date(y, m, 1));
 }
 
 export function formatDocNumber(prefix: string, n: number): string {

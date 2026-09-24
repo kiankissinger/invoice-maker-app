@@ -13,6 +13,9 @@ The backend for the app's cloud features: accounts, sync, emailed invoices, host
 | **Online payments** | Uses Stripe Connect with Express accounts. Each business connects its own Stripe account, and clients pay through Stripe Checkout straight to that account; you can optionally take a platform fee (`PLATFORM_FEE_BPS`). A Connect webhook records the payment (safe to receive twice), updates the invoice and sends the owner a push notification. |
 | **Reminders** | A background job runs every 15 minutes. For unpaid invoices that have been sent, it emails the client N days before the due date, on the due date, and every N days after, up to a limit. Each reminder is sent at most once, only between 9:00 and 20:00 in the user's time zone. |
 | **Recurring invoices** | The same job creates the next invoice when its date arrives. It takes the next number from the user's profile and emails the invoice automatically if that's turned on. After downtime it catches up on missed dates. Monthly dates are calculated from the first invoice, so the 31st stays the 31st where the month has one. |
+| **Estimate approval and deposits** | Estimate links have an **Accept** form: the client types their name, the estimate is marked accepted, and the owner gets a push notification. If the estimate asks for a deposit, a **Pay deposit** button appears. Invoices with a deposit offer **Pay deposit** or **Pay in full**. Deposits paid on an estimate carry over to the invoice when it's converted. |
+| **Late fees** | A background job adds one "Late payment fee" line (a percentage of the balance or a flat amount) to sent invoices once they're overdue by more than the grace period. It then notifies the owner. |
+| **AI** | `POST /v1/ai/receipt` reads a receipt photo, and `POST /v1/ai/draft-items` turns a job description into line items using the user's saved item prices. Both call Claude (`claude-opus-5`) at low effort with structured outputs, so replies always match the expected fields. If Claude declines a request, the server's automatic fallback retries it on another model. Set `ANTHROPIC_API_KEY` to turn these on. |
 | **Pro check** | Everything except sign-in needs Pro. The server asks RevenueCat and caches the answer (1 hour for Pro, 5 minutes for not Pro). The app calls `Purchases.logIn(userId)` after sign-in, so both sides use the same user ID. |
 
 If you run more than one server instance, a Postgres advisory lock makes sure only one of them runs the background jobs.
@@ -54,6 +57,9 @@ Set `REVENUECAT_SECRET_KEY` (a v1 secret key) and make sure the entitlement is n
 ### Push notifications
 Run `npx eas-cli@latest init` in the app so it gets an EAS `projectId`, and set up push credentials (APNs and FCM) with EAS. If you turn on enhanced push security in Expo, set `EXPO_ACCESS_TOKEN`.
 
+### AI (Claude)
+Set `ANTHROPIC_API_KEY`. Scanning a receipt or drafting items is one short request each. Without the key, those endpoints return `503 ai_not_configured` and the app shows an error.
+
 ### App review
 App Store and Play reviewers can't receive your emails. Set `REVIEW_LOGIN_EMAIL` and `REVIEW_LOGIN_CODE` (6 digits) and put them in the review notes.
 
@@ -69,10 +75,13 @@ App Store and Play reviewers can't receive your emails. Set `REVIEW_LOGIN_EMAIL`
 | POST | `/v1/sync` | `{ cursor, changes[] }` returns `{ cursor, hasMore, changes[] }` · Pro |
 | POST | `/v1/documents/:id/share` | Create or return the hosted link · Pro |
 | POST | `/v1/documents/:id/send` | `{ to, message? }` emails the document · Pro |
+| POST | `/v1/ai/receipt` | `{ image (base64 JPEG) }` returns vendor, date, total, tax, currency and category · Pro |
+| POST | `/v1/ai/draft-items` | `{ description, currency }` returns `{ items[], notes }` · Pro |
 | POST | `/v1/stripe/connect` | Returns the Stripe onboarding link · Pro |
 | GET | `/v1/stripe/status` | Whether the account is connected and can accept charges |
 | POST | `/v1/stripe/dashboard` | Returns a Stripe Express dashboard login link |
 | GET | `/i/:token` | Hosted invoice page (public) |
-| POST | `/i/:token/pay` | Redirects to Stripe Checkout for the balance due (public) |
+| POST | `/i/:token/pay` | `amount=deposit\|balance` redirects to Stripe Checkout (public) |
+| POST | `/i/:token/accept` | `name=…` accepts an estimate (public) |
 | POST | `/stripe/webhook` | Stripe Connect webhook |
 | GET | `/health` | Liveness and database check |

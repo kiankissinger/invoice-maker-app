@@ -1,3 +1,4 @@
+import { createAiService } from './ai';
 import { createApp } from './app';
 import { loadConfig } from './config';
 import type { Context } from './context';
@@ -17,11 +18,13 @@ async function main() {
     pusher: createPusher(config),
     payments: createStripeGateway(config),
     entitlements: createEntitlementChecker(config),
+    ai: createAiService(config.anthropicApiKey),
     now: () => new Date(),
   };
 
   if (config.env === 'production' && config.allowAllPro) console.warn('WARNING: ALLOW_ALL_PRO is on in production.');
   if (!ctx.payments) console.warn('Stripe is not configured; online payments are disabled.');
+  if (!ctx.ai) console.warn('ANTHROPIC_API_KEY is not set; AI receipt scanning and drafting are disabled.');
   if (!config.resendApiKey) console.warn('Resend is not configured; emails are logged instead of sent.');
 
   const server = createApp(ctx).listen(config.port, () => console.log(`API listening on :${config.port}`));

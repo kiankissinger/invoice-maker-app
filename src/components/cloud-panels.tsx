@@ -43,14 +43,14 @@ export function DeliveryPanel({ doc }: { doc: InvoiceDocument }) {
       <ListRow
         icon="mail-outline"
         title="Email to client"
-        subtitle={isInvoice ? 'With a link to view, download and pay' : 'With a link to view and download'}
+        subtitle={isInvoice ? 'With a link to view, download and pay' : 'Client can approve online and pay a deposit'}
         onPress={() => requireCloud('onlinePayments') && router.push({ pathname: '/send', params: { docId: doc.id } })}
       />
       <ListRow
         icon="link-outline"
         title={sharing ? 'Creating link…' : 'Share link'}
         subtitle="Text it, WhatsApp it, anywhere"
-        last={!doc.sentAt && !doc.viewedAt && !onlinePayments && !(isPro && signedIn && isInvoice)}
+        last={!doc.sentAt && !doc.viewedAt && !doc.approval && !onlinePayments && !(isPro && signedIn && isInvoice)}
         onPress={shareLink}
       />
       {doc.sentAt ? (
@@ -59,6 +59,11 @@ export function DeliveryPanel({ doc }: { doc: InvoiceDocument }) {
         </AppText>
       ) : null}
       {doc.viewedAt ? <AppText variant="caption">👀 Viewed by client · {when(doc.viewedAt)}</AppText> : null}
+      {doc.approval ? (
+        <AppText variant="caption" color="success">
+          ✍️ Accepted by {doc.approval.name} · {when(doc.approval.at)}
+        </AppText>
+      ) : null}
       {onlinePayments ? <AppText variant="caption">💳 {onlinePayments} online payment{onlinePayments > 1 ? 's' : ''}</AppText> : null}
       {isPro && signedIn && isInvoice ? (
         <>

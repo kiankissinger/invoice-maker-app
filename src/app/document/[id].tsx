@@ -5,6 +5,7 @@ import { Alert, Platform, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { DeliveryPanel, RecurrencePanel } from '@/components/cloud-panels';
+import { DepositSection, PhotosSection } from '@/components/doc-extras';
 import { NumberField } from '@/components/number-field';
 import {
   AppText,
@@ -70,7 +71,7 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
   const profile = useStore((s) => s.profile);
   const client = useStore((s) => (doc.clientId ? s.clients[doc.clientId] : undefined));
   const update = useStore((s) => s.updateDocument);
-  const { isPro, requirePro, canCreateDocument } = useProGate();
+  const { isPro, requirePro, requireCloud, canCreateDocument } = useProGate();
   const [busy, setBusy] = useState<'preview' | 'share' | null>(null);
 
   const isInvoice = doc.type === 'invoice';
@@ -186,6 +187,12 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
             </Row>
           </Pressable>
         }>
+        <Button
+          title="Describe the job with AI"
+          icon="sparkles"
+          variant="secondary"
+          onPress={() => requireCloud('ai') && router.push({ pathname: '/ai-draft', params: { docId: doc.id } })}
+        />
         {doc.items.map((item, index) => (
           <LineItemEditor
             key={item.id}
@@ -220,6 +227,15 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
           <NumberField label="Tax rate %" value={doc.taxRate} onChange={(taxRate) => patch({ taxRate })} />
         </Row>
         <NumberField label="Shipping" value={doc.shipping} onChange={(shipping) => patch({ shipping })} />
+        <Row>
+          <Field
+            label="Withholding label"
+            value={doc.withholdingLabel ?? ''}
+            placeholder="Withholding"
+            onChangeText={(withholdingLabel) => patch({ withholdingLabel })}
+          />
+          <NumberField label="Withholding %" value={doc.withholdingRate ?? 0} onChange={(withholdingRate) => patch({ withholdingRate })} />
+        </Row>
       </Section>
 
       <Section title="Summary">
@@ -227,8 +243,11 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
         {totals.discount ? <TotalLine label="Discount" value={`−${money(totals.discount)}`} /> : null}
         {totals.tax ? <TotalLine label={`${doc.taxLabel} (${doc.taxRate}%)`} value={money(totals.tax)} /> : null}
         {totals.shipping ? <TotalLine label="Shipping" value={money(totals.shipping)} /> : null}
+        {totals.withholding ? (
+          <TotalLine label={`${doc.withholdingLabel || 'Withholding'} (${doc.withholdingRate}%)`} value={`−${money(totals.withholding)}`} />
+        ) : null}
         <TotalLine label="Total" value={money(totals.total)} strong />
-        {isInvoice && totals.paid ? (
+        {totals.paid ? (
           <>
             <TotalLine label="Paid" value={`−${money(totals.paid)}`} />
             <TotalLine label="Balance due" value={money(totals.balance)} strong />
@@ -261,12 +280,16 @@ function Editor({ doc }: { doc: InvoiceDocument }) {
         </Section>
       ) : null}
 
+      <DepositSection doc={doc} />
+
       {isInvoice ? <RecurrencePanel doc={doc} /> : null}
 
       <Section title="Notes & terms">
         <Field label="Notes" value={doc.notes} onChangeText={(notes) => patch({ notes })} multiline />
         <Field label="Terms & conditions" value={doc.terms} onChangeText={(terms) => patch({ terms })} multiline />
       </Section>
+
+      <PhotosSection doc={doc} />
 
       <Section title="Signature" action={!isPro ? <ProBadge /> : undefined}>
         {doc.signature ? (

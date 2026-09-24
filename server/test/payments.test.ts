@@ -77,7 +77,7 @@ test('full pay-online flow: send, view, pay, webhook, sync', async () => {
   assert.equal(checkout.applicationFeeMinor, 550);
   assert.equal(checkout.accountId, 'acct_test_1');
   assert.equal(checkout.customerEmail, 'ap@acme.com');
-  assert.deepEqual(checkout.metadata, { userId: s.user.id, docId: 'doc-1', token: path.split('/').pop() });
+  assert.deepEqual(checkout.metadata, { userId: s.user.id, docId: 'doc-1', token: path.split('/').pop(), kind: 'balance' });
 
   // Meanwhile a device edits the invoice offline without the payment...
   const offlineEdit = { ...s.doc, notes: 'edited offline', updatedAt: '2026-09-24T15:30:00.000Z' };

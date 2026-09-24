@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AppText, Button, Card, EmptyState, ListRow, Row, Screen, Section } from '@/components/ui';
+import { ExpensesPanel, ProfitSummary } from '@/components/expenses-panel';
+import { AppText, Button, Card, ListRow, Row, Screen, Section } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useIsPro } from '@/lib/purchases';
 import { useTheme } from '@/hooks/use-theme';
@@ -71,12 +72,13 @@ export default function ReportsTab() {
   if (!isPro) {
     return (
       <Screen>
-        <EmptyState
-          icon="bar-chart-outline"
-          title="Know where your money is"
-          message="See monthly revenue, what's overdue and who your best clients are. Included with Pro."
-          action={<Button title="Unlock reports" icon="sparkles" onPress={() => router.push({ pathname: '/paywall', params: { feature: 'reports' } })} />}
-        />
+        <ProfitSummary />
+        <ExpensesPanel />
+        <Card>
+          <AppText variant="heading">Know where your money is</AppText>
+          <AppText variant="caption">Monthly revenue, unpaid invoices by age, top clients and your estimate pipeline. Included with Pro.</AppText>
+          <Button title="Unlock reports" icon="sparkles" onPress={() => router.push({ pathname: '/paywall', params: { feature: 'reports' } })} />
+        </Card>
       </Screen>
     );
   }
@@ -86,16 +88,12 @@ export default function ReportsTab() {
 
   return (
     <Screen>
-      <Row>
-        <Card style={{ flex: 1 }}>
-          <AppText variant="caption">Collected this year</AppText>
-          <AppText variant="heading">{money(report.yearCollected)}</AppText>
-        </Card>
-        <Card style={{ flex: 1 }}>
-          <AppText variant="caption">Estimate pipeline</AppText>
-          <AppText variant="heading">{money(report.pipeline)}</AppText>
-        </Card>
-      </Row>
+      <ProfitSummary />
+      <ExpensesPanel />
+      <Card>
+        <AppText variant="caption">Open & accepted estimates</AppText>
+        <AppText variant="heading">{money(report.pipeline)}</AppText>
+      </Card>
 
       <Section title={`Last ${MONTHS} months`}>
         <View style={styles.chart}>

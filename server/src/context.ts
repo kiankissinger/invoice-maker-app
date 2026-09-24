@@ -1,3 +1,4 @@
+import type { AiService } from './ai';
 import type { Config } from './config';
 import type { Db } from './db';
 import type { EntitlementChecker, Mailer, PaymentsGateway, Pusher } from './services';
@@ -9,6 +10,7 @@ export type Context = {
   pusher: Pusher;
   payments: PaymentsGateway | null;
   entitlements: EntitlementChecker;
+  ai: AiService | null;
   now: () => Date;
 };
 

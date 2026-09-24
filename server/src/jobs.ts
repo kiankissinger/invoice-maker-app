@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { addDays, computeTotals, daysBetween, formatDocNumber, localDateParts, recurrenceDate } from '../../src/lib/calc';
+import { addDays, computeTotals, daysBetween, formatDocNumber, lateFeeAmount, localDateParts, recurrenceDate } from '../../src/lib/calc';
+import { formatMoney } from '../../src/lib/format';
 import type { BusinessProfile, InvoiceDocument, ReminderSettings } from '../../src/lib/types';
 import { isPro } from './auth';
 import type { Context } from './context';
@@ -32,6 +33,7 @@ export function reminderFor(settings: ReminderSettings, dueDate: string, today: 
 export async function runJobs(ctx: Context): Promise<void> {
   await ctx.db.withLock(JOBS_LOCK, async () => {
     await runRecurring(ctx);
+    await runLateFees(ctx);
     await runReminders(ctx);
   });
 }
@@ -159,6 +161,62 @@ export async function runReminders(ctx: Context): Promise<void> {
       }
     } catch (error) {
       console.error(`Reminders failed for ${userId}`, error);
+    }
+  }
+}
+
+/** Adds a one-time late fee line to invoices that are past due by more than the grace period. */
+export async function runLateFees(ctx: Context): Promise<void> {
+  const { rows: profiles } = await ctx.db.query<{ user_id: string }>(
+    `SELECT user_id FROM records WHERE type = 'profile' AND id = 'profile' AND deleted = false AND (data->'lateFee'->>'enabled') = 'true'`
+  );
+  for (const { user_id: userId } of profiles) {
+    try {
+      const profile = await getProfile(ctx.db, userId);
+      const fee = profile?.lateFee;
+      if (!profile || !fee?.enabled || fee.value <= 0) continue;
+      if (!(await isPro(ctx, userId))) continue;
+      const today = localDateParts(ctx.now(), profile.timeZone).date;
+
+      const { rows: docs } = await ctx.db.query<{ data: InvoiceDocument }>(
+        `SELECT data FROM records WHERE user_id = $1 AND type = 'document' AND deleted = false
+           AND data->>'type' = 'invoice' AND data->>'status' = 'sent' AND data->>'lateFeeAppliedAt' IS NULL`,
+        [userId]
+      );
+      for (const { data: candidate } of docs) {
+        if (!candidate.dueDate || daysBetween(candidate.dueDate, today) <= Math.max(0, fee.graceDays)) continue;
+        const updated = await ctx.db.tx((tx) =>
+          mutateDocument(tx, userId, candidate.id, ctx.now(), (doc) => {
+            const { balance } = computeTotals(doc);
+            if (doc.lateFeeAppliedAt || doc.status !== 'sent' || balance <= 0) return null;
+            const amount = lateFeeAmount(balance, fee.kind, fee.value);
+            if (amount <= 0) return null;
+            return {
+              ...doc,
+              lateFeeAppliedAt: ctx.now().toISOString(),
+              items: [
+                ...doc.items,
+                {
+                  id: 'late-fee',
+                  description: 'Late payment fee',
+                  details: fee.kind === 'percent' ? `${fee.value}% of the overdue balance` : undefined,
+                  quantity: 1,
+                  unitPrice: amount,
+                  taxable: false,
+                },
+              ],
+            };
+          })
+        );
+        if (updated?.lateFeeAppliedAt) {
+          const fee = updated.items.find((i) => i.id === 'late-fee');
+          await notifyUser(ctx, userId, 'Late fee added', `${formatMoney(fee?.unitPrice ?? 0, updated.currency)} added to overdue invoice ${updated.number}.`, {
+            docId: updated.id,
+          });
+        }
+      }
+    } catch (error) {
+      console.error(`Late fees failed for ${userId}`, error);
     }
   }
 }
