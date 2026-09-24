@@ -1,3 +1,4 @@
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { Platform } from 'react-native';
 import Purchases, {
   PURCHASES_ERROR_CODE,
@@ -79,10 +80,21 @@ export function isProNow(): boolean {
   return s.hasEntitlement || (__DEV__ && s.devPro);
 }
 
+/**
+ * Store keys for real App Store / Play builds. The Test Store key (`test_…`) simulates purchases
+ * with no store account, and is the only kind that works in Expo Go and on the web.
+ */
 function apiKey(): string | undefined {
-  if (Platform.OS === 'ios') return process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY;
-  if (Platform.OS === 'android') return process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
-  return undefined;
+  const testKey = process.env.EXPO_PUBLIC_REVENUECAT_TEST_KEY || undefined;
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  if (Platform.OS === 'web' || isExpoGo) return testKey;
+  const storeKey =
+    Platform.OS === 'ios'
+      ? process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY
+      : Platform.OS === 'android'
+        ? process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY
+        : undefined;
+  return storeKey || testKey;
 }
 
 function applyCustomerInfo(info: CustomerInfo) {
