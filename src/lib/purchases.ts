@@ -8,6 +8,8 @@ import Purchases, {
 } from 'react-native-purchases';
 import { create } from 'zustand';
 
+import { scheduleTrialReminder } from './notifications';
+
 /** RevenueCat entitlement that unlocks every Pro feature. */
 export const PRO_ENTITLEMENT = 'pro';
 
@@ -27,7 +29,9 @@ export type ProFeature =
   | 'onlinePayments'
   | 'reminders'
   | 'recurring'
-  | 'cloud';
+  | 'cloud'
+  | 'ai'
+  | 'lateFees';
 
 export const PRO_FEATURES: { key: ProFeature; title: string; detail: string }[] = [
   { key: 'unlimited', title: 'Unlimited invoices & estimates', detail: 'No caps, ever.' },
@@ -43,6 +47,8 @@ export const PRO_FEATURES: { key: ProFeature; title: string; detail: string }[] 
   { key: 'reminders', title: 'Automatic reminders', detail: 'Polite nudges before and after the due date.' },
   { key: 'recurring', title: 'Recurring invoices', detail: 'Bill retainers automatically every week, month or year.' },
   { key: 'cloud', title: 'Cloud sync & backup', detail: 'Your data on every device, never lost.' },
+  { key: 'ai', title: 'AI assistant', detail: 'Describe the job, get line items. Snap a receipt, get an expense.' },
+  { key: 'lateFees', title: 'Automatic late fees', detail: 'Added for you when an invoice runs overdue.' },
 ];
 
 type SubscriptionState = {
@@ -80,7 +86,9 @@ function apiKey(): string | undefined {
 }
 
 function applyCustomerInfo(info: CustomerInfo) {
-  useSubscription.setState({ hasEntitlement: info.entitlements.active[PRO_ENTITLEMENT] != null });
+  const pro = info.entitlements.active[PRO_ENTITLEMENT];
+  useSubscription.setState({ hasEntitlement: pro != null });
+  void scheduleTrialReminder(pro?.expirationDate ?? null, pro?.periodType === 'TRIAL', pro?.willRenew ?? false);
 }
 
 let initialized = false;
@@ -122,6 +130,21 @@ export async function purchase(pkg: PurchasesPackage): Promise<boolean> {
     if ((error as PurchasesError).code === PURCHASES_ERROR_CODE.PURCHASE_CANCELLED_ERROR) return false;
     throw error;
   }
+}
+
+/** Where the user can change or cancel their subscription (App Store / Google Play). */
+export async function getManagementUrl(): Promise<string> {
+  if (useSubscription.getState().storeAvailable) {
+    try {
+      const info = await Purchases.getCustomerInfo();
+      if (info.managementURL) return info.managementURL;
+    } catch (error) {
+      console.warn('Could not load subscription info', error);
+    }
+  }
+  return Platform.OS === 'android'
+    ? 'https://play.google.com/store/account/subscriptions'
+    : 'https://apps.apple.com/account/subscriptions';
 }
 
 export async function restore(): Promise<boolean> {

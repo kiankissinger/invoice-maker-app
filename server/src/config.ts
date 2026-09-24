@@ -32,6 +32,9 @@ const schema = z.object({
   /** Treat every user as Pro when RevenueCat isn't configured. Never enable in production. */
   ALLOW_ALL_PRO: bool,
 
+  /** Claude API key for receipt scanning and AI drafting. */
+  ANTHROPIC_API_KEY: z.string().optional(),
+
   /** Optional fixed login for App Store / Play review accounts. */
   REVIEW_LOGIN_EMAIL: z.string().optional(),
   REVIEW_LOGIN_CODE: z.string().regex(/^\d{6}$/).optional(),
@@ -59,6 +62,7 @@ export type Config = {
   revenuecatSecretKey?: string;
   revenuecatEntitlement: string;
   allowAllPro: boolean;
+  anthropicApiKey?: string;
   reviewEmail?: string;
   reviewCode?: string;
   expoAccessToken?: string;
@@ -86,6 +90,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     revenuecatSecretKey: parsed.REVENUECAT_SECRET_KEY,
     revenuecatEntitlement: parsed.REVENUECAT_ENTITLEMENT,
     allowAllPro: parsed.ALLOW_ALL_PRO ?? (!production && !parsed.REVENUECAT_SECRET_KEY),
+    anthropicApiKey: parsed.ANTHROPIC_API_KEY,
     reviewEmail: parsed.REVIEW_LOGIN_EMAIL,
     reviewCode: parsed.REVIEW_LOGIN_CODE,
     expoAccessToken: parsed.EXPO_ACCESS_TOKEN,

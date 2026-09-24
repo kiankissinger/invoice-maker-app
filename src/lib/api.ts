@@ -1,4 +1,4 @@
-import type { InvoiceDocument, SyncChange } from './types';
+import type { ExpenseCategory, InvoiceDocument, SyncChange } from './types';
 
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/$/, '');
 export const apiConfigured = () => API_URL.length > 0;
@@ -68,6 +68,17 @@ export const api = {
   shareDocument: (id: string) => request<{ url: string; document: InvoiceDocument }>('POST', `/v1/documents/${id}/share`),
   sendDocument: (id: string, to: string, message?: string) =>
     request<{ url: string; document: InvoiceDocument }>('POST', `/v1/documents/${id}/send`, { to, message }),
+  scanReceipt: (image: string) =>
+    request<{ vendor: string | null; date: string | null; total: number | null; tax: number | null; currency: string | null; category: ExpenseCategory }>(
+      'POST',
+      '/v1/ai/receipt',
+      { image, mediaType: 'image/jpeg' }
+    ),
+  draftItems: (description: string, currency: string) =>
+    request<{
+      items: { description: string; details: string | null; quantity: number; unitPrice: number; unit: string | null; taxable: boolean }[];
+      notes: string | null;
+    }>('POST', '/v1/ai/draft-items', { description, currency }),
   connectStripe: () => request<{ url: string }>('POST', '/v1/stripe/connect'),
   stripeStatus: () => request<StripeStatus>('GET', '/v1/stripe/status'),
   stripeDashboard: () => request<{ url: string }>('POST', '/v1/stripe/dashboard'),

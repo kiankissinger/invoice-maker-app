@@ -9,6 +9,7 @@ import type {
   CatalogItem,
   Client,
   DocType,
+  Expense,
   InvoiceDocument,
   LineItem,
   Payment,
@@ -40,6 +41,7 @@ export const DEFAULT_PROFILE: BusinessProfile = {
   nextEstimateNumber: 1,
   templateId: 'classic',
   reminders: { enabled: true, daysBefore: 3, onDueDate: true, everyDaysAfter: 7, maxAfter: 3 },
+  lateFee: { enabled: false, kind: 'percent', value: 1.5, graceDays: 7 },
 };
 
 const nowISO = () => new Date().toISOString();
@@ -62,6 +64,7 @@ type State = {
   documents: Record<string, InvoiceDocument>;
   clients: Record<string, Client>;
   catalog: Record<string, CatalogItem>;
+  expenses: Record<string, Expense>;
   /** Lifetime count; drives the free-tier limit so deleting documents doesn't reset it. */
   documentsCreated: number;
   /** "type:id" -> deletion time, so deletes can be synced. */
@@ -82,6 +85,8 @@ type Actions = {
   deleteClient: (id: string) => void;
   upsertCatalogItem: (item: Omit<CatalogItem, 'id'> & { id?: string }) => CatalogItem;
   deleteCatalogItem: (id: string) => void;
+  upsertExpense: (expense: Omit<Expense, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => Expense;
+  deleteExpense: (id: string) => void;
   resetAll: () => void;
   /** Local changes made after `since` (everything when null), for pushing to the server. */
   collectChanges: (since: string | null) => SyncChange[];
@@ -95,6 +100,7 @@ const initialData = {
   documents: {},
   clients: {},
   catalog: {},
+  expenses: {},
   documentsCreated: 0,
   tombstones: {},
   syncMeta: { cursor: 0, pushedUpTo: null },
@@ -186,7 +192,7 @@ export const useStore = create<State & Actions>()(
             status: 'draft',
             issueDate,
             dueDate: addDays(issueDate, get().profile.defaultPaymentTermsDays),
-            items: source.items.map((item) => ({ ...item, id: newId() })),
+            items: source.items.filter((item) => item.id !== 'late-fee').map((item) => ({ ...item, id: newId() })),
             payments: [],
             signature: undefined,
             convertedFromId: undefined,
@@ -197,6 +203,8 @@ export const useStore = create<State & Actions>()(
             viewedAt: undefined,
             recurrence: undefined,
             recurringParentId: undefined,
+            approval: undefined,
+            lateFeeAppliedAt: undefined,
             createdAt: now,
             updatedAt: now,
           };
@@ -222,6 +230,12 @@ export const useStore = create<State & Actions>()(
             terms: estimate.terms,
             currency: estimate.currency,
             templateId: estimate.templateId,
+            withholdingRate: estimate.withholdingRate,
+            withholdingLabel: estimate.withholdingLabel,
+            photos: estimate.photos,
+            // Deposits paid against the estimate count towards the invoice.
+            payments: estimate.payments,
+            signature: estimate.signature,
             convertedFromId: estimate.id,
           });
           get().updateDocument(estimate.id, { status: 'converted', convertedToId: invoice.id });
@@ -274,10 +288,28 @@ export const useStore = create<State & Actions>()(
             return { catalog: rest, tombstones: { ...s.tombstones, [key('catalog', id)]: nowISO() } };
           }),
 
+        upsertExpense: (input) => {
+          const existing = input.id ? get().expenses[input.id] : undefined;
+          const expense: Expense = {
+            ...input,
+            id: existing?.id ?? newId(),
+            createdAt: existing?.createdAt ?? nowISO(),
+            updatedAt: nowISO(),
+          };
+          set((s) => ({ expenses: { ...s.expenses, [expense.id]: expense } }));
+          return expense;
+        },
+
+        deleteExpense: (id) =>
+          set((s) => {
+            const { [id]: _removed, ...rest } = s.expenses;
+            return { expenses: rest, tombstones: { ...s.tombstones, [key('expense', id)]: nowISO() } };
+          }),
+
         resetAll: () => set({ ...initialData }),
 
         collectChanges: (since) => {
-          const { documents, clients, catalog, profile, tombstones } = get();
+          const { documents, clients, catalog, expenses, profile, tombstones } = get();
           const newer = (updatedAt?: string) => !!updatedAt && (!since || updatedAt > since);
           const changes: SyncChange[] = [];
           const add = (type: SyncType, items: Record<string, { id: string; updatedAt?: string }>) => {
@@ -288,6 +320,7 @@ export const useStore = create<State & Actions>()(
           add('document', documents);
           add('client', clients);
           add('catalog', catalog);
+          add('expense', expenses);
           if (newer(profile.updatedAt)) {
             changes.push({ type: 'profile', id: 'profile', updatedAt: profile.updatedAt!, deleted: false, data: { ...profile, id: 'profile' } });
           }
@@ -304,12 +337,14 @@ export const useStore = create<State & Actions>()(
             const documents = { ...s.documents };
             const clients = { ...s.clients };
             const catalog = { ...s.catalog };
+            const expenses = { ...s.expenses };
             const tombstones = { ...s.tombstones };
             let profile = s.profile;
             const tables: Record<Exclude<SyncType, 'profile'>, Record<string, { updatedAt?: string }>> = {
               document: documents,
               client: clients,
               catalog,
+              expense: expenses,
             };
 
             for (const change of changes) {
@@ -331,7 +366,7 @@ export const useStore = create<State & Actions>()(
               }
               delete tombstones[k];
             }
-            return { documents, clients, catalog, profile, tombstones };
+            return { documents, clients, catalog, expenses, profile, tombstones };
           }),
 
         setSyncMeta: (meta) => set((s) => ({ syncMeta: { ...s.syncMeta, ...meta } })),
@@ -339,7 +374,7 @@ export const useStore = create<State & Actions>()(
     },
     {
       name: 'invoice-maker-store',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => AsyncStorage),
       migrate: (persisted, version) => {
         const state = persisted as State;
@@ -353,6 +388,7 @@ export const useStore = create<State & Actions>()(
           state.syncMeta = { cursor: 0, pushedUpTo: null };
           if (state.profile && (state.profile.name || state.profile.email)) state.profile.updatedAt = nowISO();
         }
+        if (version < 3) state.expenses = state.expenses ?? {};
         return state;
       },
       partialize: ({ hydrated: _hydrated, ...rest }) => rest,

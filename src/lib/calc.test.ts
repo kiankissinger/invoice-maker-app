@@ -6,6 +6,8 @@ import {
   addDays,
   addMonths,
   computeTotals,
+  depositStatus,
+  lateFeeAmount,
   daysBetween,
   displayStatus,
   formatDocNumber,
@@ -136,4 +138,26 @@ test('nextOccurrence skips past dates', () => {
   assert.deepEqual(nextOccurrence('2026-01-15', 'monthly', '2026-01-20'), { count: 0, nextIssueDate: '2026-02-15' });
   assert.deepEqual(nextOccurrence('2026-01-15', 'monthly', '2026-05-15'), { count: 3, nextIssueDate: '2026-05-15' });
   assert.deepEqual(nextOccurrence('2026-01-01', 'weekly', '2026-01-02'), { count: 0, nextIssueDate: '2026-01-08' });
+});
+
+test('withholding is taken off the pre-tax amount', () => {
+  const t = computeTotals(doc({ items: [item(1, 1000)], taxRate: 21, withholdingRate: 15 }));
+  assert.equal(t.tax, 210);
+  assert.equal(t.withholding, 150);
+  assert.equal(t.total, 1060);
+});
+
+test('deposit status tracks what is still owed', () => {
+  const base = { items: [item(1, 1000)], deposit: { kind: 'percent' as const, value: 25 } };
+  assert.deepEqual(depositStatus(doc(base)), { amount: 250, outstanding: 250 });
+  const paid = [{ id: 'p', date: '2026-01-02', amount: 100, method: 'card' as const }];
+  assert.deepEqual(depositStatus(doc({ ...base, payments: paid })), { amount: 250, outstanding: 150 });
+  assert.deepEqual(depositStatus(doc({ items: [item(1, 100)], deposit: { kind: 'amount', value: 500 } })), { amount: 100, outstanding: 100 });
+  assert.deepEqual(depositStatus(doc({ items: [item(1, 100)] })), { amount: 0, outstanding: 0 });
+});
+
+test('late fee amounts', () => {
+  assert.equal(lateFeeAmount(1234.56, 'percent', 1.5), 18.52);
+  assert.equal(lateFeeAmount(500, 'amount', 25), 25);
+  assert.equal(lateFeeAmount(-5, 'percent', 10), 0);
 });

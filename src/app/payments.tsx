@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { NumberField } from '@/components/number-field';
-import { AppText, Button, Row, Screen, Section, ToggleRow } from '@/components/ui';
+import { AppText, Button, Row, Screen, Section, Segmented, ToggleRow } from '@/components/ui';
 import { useProGate } from '@/hooks/use-pro-gate';
 import { api, ApiError, type StripeStatus } from '@/lib/api';
 import { useStore } from '@/lib/store';
@@ -12,6 +12,7 @@ import { useStore } from '@/lib/store';
 export default function PaymentsScreen() {
   const { requireCloud, signedIn, isPro } = useProGate();
   const reminders = useStore((s) => s.profile.reminders);
+  const lateFee = useStore((s) => s.profile.lateFee);
   const updateProfile = useStore((s) => s.updateProfile);
   const [status, setStatus] = useState<StripeStatus | null>(null);
   const [busy, setBusy] = useState(false);
@@ -23,6 +24,7 @@ export default function PaymentsScreen() {
   useFocusEffect(refresh);
 
   const setReminders = (patch: Partial<typeof reminders>) => updateProfile({ reminders: { ...reminders, ...patch } });
+  const setLateFee = (patch: Partial<typeof lateFee>) => updateProfile({ lateFee: { ...lateFee, ...patch } });
 
   const open = async (getUrl: () => Promise<{ url: string }>) => {
     if (!requireCloud('onlinePayments')) return;
@@ -99,6 +101,30 @@ export default function PaymentsScreen() {
         ) : null}
         {!isPro || !signedIn ? (
           <AppText variant="caption">Reminders need Pro and a signed-in account.</AppText>
+        ) : null}
+      </Section>
+
+      <Section title="Late fees">
+        <AppText variant="caption">
+          Adds a one-time “Late payment fee” line to sent invoices once they are overdue by more than the grace period. Check local rules on
+          maximum late fees and mention them in your terms.
+        </AppText>
+        <ToggleRow label="Add late fees automatically" value={lateFee.enabled} onValueChange={(enabled) => (!enabled || requireCloud('lateFees')) && setLateFee({ enabled })} />
+        {lateFee.enabled ? (
+          <>
+            <Segmented
+              options={[
+                { value: 'percent', label: '% of balance' },
+                { value: 'amount', label: 'Flat amount' },
+              ]}
+              value={lateFee.kind}
+              onChange={(kind) => setLateFee({ kind })}
+            />
+            <Row>
+              <NumberField key={lateFee.kind} label={lateFee.kind === 'percent' ? 'Fee %' : 'Fee amount'} value={lateFee.value} onChange={(value) => setLateFee({ value: Math.max(0, value) })} />
+              <NumberField label="Grace days" value={lateFee.graceDays} onChange={(v) => setLateFee({ graceDays: Math.max(0, Math.round(v)) })} />
+            </Row>
+          </>
         ) : null}
       </Section>
     </Screen>

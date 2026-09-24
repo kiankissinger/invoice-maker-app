@@ -6,11 +6,10 @@ import { HttpError, type Context } from './context';
 import { notifyUser } from './notify';
 import { connectStripe, gateway, handlePaymentEvent, stripeDashboard, stripeStatus } from './payments';
 import { hostedInvoicePage, simplePage } from './public-page';
-import { getClient, getDocument, getProfile, mutateDocument } from './records';
+import { getClient, getDocument, getProfile, mutateDocument, type RecordRow } from './records';
 import { toMinorUnits } from './services';
-import { canPayOnline, emailDocument, paymentsEnabled, shareDocument } from './sharing';
+import { emailDocument, payableAmounts, paymentsEnabled, shareDocument } from './sharing';
 import { sync, syncRequestSchema } from './sync';
-import { computeTotals } from '../../src/lib/calc';
 
 type Handler = (req: Request, res: Response) => Promise<unknown>;
 const wrap = (fn: Handler) => (req: Request, res: Response, next: NextFunction) => fn(req, res).catch(next);
@@ -158,6 +157,33 @@ export function createApp(ctx: Context) {
     res.json({ url, document: doc });
   }));
 
+  const ai = () => {
+    if (!ctx.ai) throw new HttpError(503, 'ai_not_configured', 'AI features are not configured on this server.');
+    return ctx.ai;
+  };
+
+  authed.post('/ai/receipt', pro, wrap(async (req, res) => {
+    const { image, mediaType } = parse(
+      z.object({ image: z.string().min(100).max(7_000_000), mediaType: z.enum(['image/jpeg', 'image/png']).default('image/jpeg') }),
+      req.body
+    );
+    res.json(await ai().scanReceipt({ data: image, mediaType }));
+  }));
+
+  authed.post('/ai/draft-items', pro, wrap(async (req, res) => {
+    const { description, currency } = parse(
+      z.object({ description: z.string().trim().min(3).max(4000), currency: z.string().length(3).default('USD') }),
+      req.body
+    );
+    const userId = req.user!.id;
+    const [profile, catalogRows] = await Promise.all([
+      getProfile(ctx.db, userId),
+      ctx.db.query<RecordRow>(`SELECT data FROM records WHERE user_id = $1 AND type = 'catalog' AND deleted = false ORDER BY updated_at DESC LIMIT 50`, [userId]),
+    ]);
+    const catalog = catalogRows.rows.map((r) => r.data as { description: string; unitPrice: number; unit?: string });
+    res.json(await ai().draftItems({ description, currency, businessName: profile?.name || undefined, catalog }));
+  }));
+
   authed.post('/stripe/connect', pro, wrap(async (req, res) => {
     res.json({ url: await connectStripe(ctx, req.user!.id, req.user!.email) });
   }));
@@ -230,8 +256,9 @@ export function createApp(ctx: Context) {
           client,
           appName: ctx.config.appName,
           token,
-          payable: canPayOnline(doc, stripeReady),
-          justPaid: req.query.paid === '1',
+          payable: payableAmounts(doc, stripeReady),
+          canAccept: doc.type === 'estimate' && (doc.status === 'sent' || doc.status === 'draft'),
+          banner: req.query.paid === '1' ? 'paid' : req.query.accepted === '1' ? 'accepted' : undefined,
         })
       );
   }));
@@ -246,22 +273,50 @@ export function createApp(ctx: Context) {
       [share.user_id]
     );
     const accountId = rows[0]?.stripe_account_id;
-    if (!accountId || !canPayOnline(doc, rows[0].stripe_charges_enabled)) return res.redirect(303, `/i/${token}`);
+    const payable = payableAmounts(doc, !!rows[0]?.stripe_charges_enabled);
+    const kind = req.body?.amount === 'deposit' ? 'deposit' : 'balance';
+    // Fall back to whatever is payable if the requested option no longer applies.
+    const amount = payable[kind] ?? payable.balance ?? payable.deposit;
+    if (!accountId || amount === undefined) return res.redirect(303, `/i/${token}`);
+    const isDeposit = amount === payable.deposit && (kind === 'deposit' || payable.balance === undefined);
 
     const client = await getClient(ctx.db, share.user_id, doc.clientId);
-    const amountMinor = toMinorUnits(computeTotals(doc).balance, doc.currency);
+    const amountMinor = toMinorUnits(amount, doc.currency);
     const url = await gateway(ctx).createCheckout({
       accountId,
       currency: doc.currency,
       amountMinor,
       applicationFeeMinor: Math.floor((amountMinor * ctx.config.platformFeeBps) / 10_000),
-      description: `Invoice ${doc.number}`,
+      description: `${isDeposit ? 'Deposit for ' : ''}${doc.type === 'invoice' ? 'Invoice' : 'Estimate'} ${doc.number}`,
       customerEmail: client?.email || undefined,
       successUrl: `${ctx.config.publicUrl}/i/${token}?paid=1`,
       cancelUrl: `${ctx.config.publicUrl}/i/${token}`,
-      metadata: { userId: share.user_id, docId: doc.id, token },
+      metadata: { userId: share.user_id, docId: doc.id, token, kind: isDeposit ? 'deposit' : 'balance' },
     });
     res.redirect(303, url);
+  }));
+
+  app.post('/i/:token/accept', wrap(async (req, res) => {
+    const token = String(req.params.token);
+    const found = await loadShare(token);
+    if (!found) return notFound(res);
+    const { share, doc } = found;
+    const name = String(req.body?.name ?? '').trim().slice(0, 100);
+    if (doc.type !== 'estimate' || !name) return res.redirect(303, `/i/${token}`);
+
+    let accepted = false;
+    await ctx.db.tx((tx) =>
+      mutateDocument(tx, share.user_id, share.doc_id, ctx.now(), (d) => {
+        if (d.status !== 'sent' && d.status !== 'draft') return null;
+        accepted = true;
+        return { ...d, status: 'accepted', approval: { name, at: ctx.now().toISOString() } };
+      })
+    );
+    if (accepted) {
+      const client = await getClient(ctx.db, share.user_id, doc.clientId);
+      await notifyUser(ctx, share.user_id, 'Estimate accepted 🎉', `${client?.name ?? name} accepted estimate ${doc.number}.`, { docId: doc.id });
+    }
+    res.redirect(303, `/i/${token}?accepted=1`);
   }));
 
   app.get('/stripe/return', (req, res) => {

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 
-import { computeTotals } from '../../src/lib/calc';
+import { computeTotals, depositStatus } from '../../src/lib/calc';
 import type { InvoiceDocument } from '../../src/lib/types';
 import { HttpError, type Context } from './context';
 import type { Queryable } from './db';
@@ -29,15 +29,24 @@ export async function paymentsEnabled(q: Queryable, userId: string): Promise<boo
   return rows[0]?.ok ?? false;
 }
 
-export function canPayOnline(doc: InvoiceDocument, stripeReady: boolean): boolean {
-  return (
-    stripeReady &&
-    doc.type === 'invoice' &&
-    doc.status !== 'void' &&
-    doc.allowOnlinePayment !== false &&
-    computeTotals(doc).balance > 0
-  );
+export type Payable = { deposit?: number; balance?: number };
+
+/** What the client can pay online right now: the outstanding deposit and/or the full balance. */
+export function payableAmounts(doc: InvoiceDocument, stripeReady: boolean): Payable {
+  if (!stripeReady || doc.status === 'void' || doc.allowOnlinePayment === false) return {};
+  const { balance } = computeTotals(doc);
+  const { outstanding } = depositStatus(doc);
+  if (doc.type === 'estimate') {
+    return doc.status === 'accepted' && outstanding > 0 ? { deposit: outstanding } : {};
+  }
+  if (balance <= 0) return {};
+  return outstanding > 0 && outstanding < balance ? { deposit: outstanding, balance } : { balance };
 }
+
+export const canPayOnline = (doc: InvoiceDocument, stripeReady: boolean) => {
+  const p = payableAmounts(doc, stripeReady);
+  return p.deposit !== undefined || p.balance !== undefined;
+};
 
 /** Shares the document, stores the link on it and returns the updated document. */
 export async function shareDocument(ctx: Context, userId: string, docId: string) {

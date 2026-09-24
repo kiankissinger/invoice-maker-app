@@ -27,6 +27,13 @@ A mobile invoice and estimate app for iOS and Android, built with Expo and React
 - **Cloud sync and backup** across devices, with passwordless email sign-in. The app still works fully offline.
 - **Email invoices from the app.** The client gets a link to view the invoice, download a PDF and **pay by card**. Payments go through Stripe Connect into your own account, and the invoice is marked paid automatically.
 - **"Client viewed your invoice"** and **"Payment received"** push notifications.
+- **Clients approve estimates online.** They type their name to sign, then pay the requested **deposit** right away. Invoices can also ask for a deposit, and the client chooses to pay the deposit or the full amount.
+- **Job-site photos** on invoices and estimates, shown on the PDF and the client's link.
+- **Withholding tax** (for example IRPF or retención).
+- **Automatic late fees**, either a percentage or a flat amount, after a grace period you choose.
+- **Expenses with AI receipt scanning.** Take a photo of a receipt and the vendor, date, total, tax and category are filled in. The Money tab shows income, expenses and profit.
+- **AI line items.** Describe the job ("4 hrs labor at $85, heater $650…") and get clean line items, using your saved prices where they match.
+- **Honest subscriptions**: no weekly plans, a reminder 2 days before the free trial ends, and "Manage subscription" in Settings.
 - **Automatic payment reminders** before the due date, on it, and every N days after, sent during the client's business hours.
 - **Recurring invoices** (weekly to yearly), which can be emailed to the client automatically.
 - Dark mode.
@@ -49,6 +56,10 @@ A mobile invoice and estimate app for iOS and Android, built with Expo and React
 | Email invoices, hosted link, online card payments | | ✓ |
 | Automatic reminders | | ✓ |
 | Recurring invoices | | ✓ |
+| Online estimate approval, and deposits paid online | | ✓ |
+| Automatic late fees | | ✓ |
+| AI receipt scanning and AI line items | | ✓ |
+| Photos, withholding, deposit requests on the PDF, expense tracking | ✓ | ✓ |
 
 The limits are defined in `src/lib/purchases.ts` (`FREE_DOCUMENT_LIMIT`, `PRO_FEATURES`). The checks are in `src/hooks/use-pro-gate.ts`. When a free user reaches a limit, the paywall opens and highlights the feature they tried to use.
 
@@ -136,9 +147,10 @@ server/                   API, background jobs and tests (see server/README.md)
 
 ## Roadmap
 
-- **Expenses and receipt scanning** with OCR, and profit reports.
 - **Time tracking** that turns tracked hours into line items.
-- **Deposits and partial payment requests** on estimates, paid online.
+- **Client portal**: one link where a client sees all their invoices and payment history.
+- **More templates** and trade-specific templates.
+- **Tips and processing-fee pass-through** on online payments.
 - **CSV and PDF export** of reports for accountants, and QuickBooks and Xero export.
 - **Multiple businesses** per account and team members.
 - **Localization** and per-country tax presets (VAT, GST, HST).

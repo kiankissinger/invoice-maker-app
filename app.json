@@ -42,6 +42,13 @@
         {
           "color": "#2563EB"
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Take photos of your work and receipts to attach to invoices and expenses.",
+          "photosPermission": "Attach photos of your work to invoices and estimates."
+        }
       ]
     ],
     "experiments": {

@@ -95,7 +95,7 @@ export default function Paywall() {
             {APP_NAME} Pro
           </AppText>
           <AppText variant="caption" style={{ textAlign: 'center' }}>
-            Get paid faster with unlimited, beautifully branded invoices. Try it free, cancel anytime.
+            Get paid faster with unlimited, beautifully branded invoices. No weekly plans, no surprise charges — try it free and cancel in two taps.
           </AppText>
         </View>
 
@@ -143,8 +143,8 @@ export default function Paywall() {
             <Button title={trial ? `Start ${trial}` : 'Continue'} loading={working} disabled={!selected} onPress={buy} />
             {selected && trial ? (
               <AppText variant="caption" style={{ textAlign: 'center' }}>
-                Free for the trial, then {selected.product.priceString} per {periodLabel(selected).toLowerCase().replace('ly', '')}. Cancel anytime in
-                your store settings.
+                Free for the trial, then {selected.product.priceString} per {periodLabel(selected).toLowerCase().replace('ly', '')}. We’ll remind you
+                before the trial ends. Cancel anytime in Settings → Manage subscription.
               </AppText>
             ) : null}
             <Button title="Restore purchases" variant="ghost" disabled={working} onPress={onRestore} />

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { NumberField } from '@/components/number-field';
@@ -9,7 +10,7 @@ import { useTheme } from '@/hooks/use-theme';
 import { CURRENCIES } from '@/lib/format';
 import { TEMPLATES } from '@/lib/pdf';
 import { useAccount } from '@/lib/account';
-import { useSubscription } from '@/lib/purchases';
+import { getManagementUrl, useSubscription } from '@/lib/purchases';
 import { useSyncStatus } from '@/lib/sync';
 import { useStore } from '@/lib/store';
 
@@ -32,9 +33,18 @@ export default function SettingsTab() {
           icon="sparkles"
           title={isPro ? 'Pro is active' : 'Upgrade to Pro'}
           subtitle={isPro ? 'Thanks for supporting the app!' : 'Free trial · unlimited invoices · no watermark'}
-          last
+          last={!isPro}
           onPress={isPro ? undefined : () => router.push('/paywall')}
         />
+        {isPro ? (
+          <ListRow
+            icon="card-outline"
+            title="Manage subscription"
+            subtitle="Change plan or cancel anytime"
+            last
+            onPress={async () => void WebBrowser.openBrowserAsync(await getManagementUrl())}
+          />
+        ) : null}
       </Card>
 
       <Section title="Your business">

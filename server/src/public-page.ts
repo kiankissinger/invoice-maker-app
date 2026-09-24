@@ -1,7 +1,8 @@
-import { computeTotals } from '../../src/lib/calc';
+import { computeTotals, depositStatus } from '../../src/lib/calc';
 import { formatMoney } from '../../src/lib/format';
 import { renderDocumentHtml } from '../../src/lib/invoice-html';
 import type { BusinessProfile, Client, InvoiceDocument } from '../../src/lib/types';
+import type { Payable } from './sharing';
 
 const escape = (value: string) =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -15,10 +16,16 @@ const BAR_CSS = `
     .pay-bar .actions { display: flex; gap: 8px; }
     .pay-bar button { font: inherit; font-size: 15px; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; }
     .pay-bar .pay { background: #16a34a; color: #fff; }
-    .pay-bar .print { background: #e5e7eb; color: #111; }
+    .pay-bar .print, .pay-bar .secondary { background: #e5e7eb; color: #111; }
+    .pay-bar .actions { flex-wrap: wrap; }
+    .accept { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 14px 16px; margin: -12px 0 24px;
+      border-radius: 12px; border: 1px solid #bfdbfe; background: #eff6ff; }
+    .accept .msg { flex-basis: 100%; font-size: 14px; }
+    .accept input { flex: 1; min-width: 180px; font: inherit; font-size: 15px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; }
+    .accept button { font: inherit; font-size: 15px; font-weight: 600; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; background: #16a34a; color: #fff; }
     .pay-bar.ok { background: #ecfdf5; border-color: #a7f3d0; }
   }
-  @media print { .pay-bar { display: none; } }
+  @media print { .pay-bar, .accept { display: none; } }
 `;
 
 export function hostedInvoicePage(params: {
@@ -27,34 +34,56 @@ export function hostedInvoicePage(params: {
   client?: Client;
   appName: string;
   token: string;
-  payable: boolean;
-  justPaid: boolean;
+  payable: Payable;
+  canAccept: boolean;
+  banner?: 'paid' | 'accepted';
 }): string {
-  const { doc, profile, client, appName, token, payable, justPaid } = params;
+  const { doc, profile, client, appName, token, payable, canAccept, banner } = params;
   const totals = computeTotals(doc);
-  const balance = formatMoney(totals.balance, doc.currency);
+  const money = (n: number) => formatMoney(n, doc.currency);
+  const isInvoice = doc.type === 'invoice';
 
   let message: string;
   let cls = 'pay-bar';
-  if (justPaid) {
+  if (banner === 'paid') {
     message = 'Thank you! Your payment was received.';
     cls += ' ok';
-  } else if (doc.type === 'invoice' && totals.total > 0 && totals.balance <= 0) {
+  } else if (banner === 'accepted') {
+    message = payable.deposit ? 'Estimate accepted — thank you! Pay the deposit to get started.' : 'Estimate accepted — thank you!';
+    cls += ' ok';
+  } else if (isInvoice && totals.total > 0 && totals.balance <= 0) {
     message = 'This invoice is paid in full. Thank you!';
     cls += ' ok';
-  } else if (doc.type === 'invoice') {
-    message = `Balance due: <b>${escape(balance)}</b>`;
+  } else if (isInvoice) {
+    message = `Balance due: <b>${escape(money(totals.balance))}</b>`;
+  } else if (doc.status === 'accepted' || doc.status === 'converted') {
+    message = `Estimate accepted${doc.approval ? ` by ${escape(doc.approval.name)}` : ''}.`;
+    cls += ' ok';
   } else {
-    message = `Estimate total: <b>${escape(formatMoney(totals.total, doc.currency))}</b>`;
+    message = `Estimate total: <b>${escape(money(totals.total))}</b>`;
   }
 
-  const bar = `<div class="${cls}">
-    <div class="msg">${message}</div>
-    <div class="actions">
-      <button class="print" type="button" onclick="window.print()">Download PDF</button>
-      ${payable && !justPaid ? `<form method="post" action="/i/${escape(token)}/pay"><button class="pay" type="submit">Pay ${escape(balance)}</button></form>` : ''}
-    </div>
-  </div>`;
+  const payButton = (kind: 'deposit' | 'balance', amount: number, label: string, primary: boolean) =>
+    `<form method="post" action="/i/${escape(token)}/pay"><input type="hidden" name="amount" value="${kind}"/>` +
+    `<button class="${primary ? 'pay' : 'secondary'}" type="submit">${escape(label)} ${escape(money(amount))}</button></form>`;
+
+  const actions = [
+    `<button class="print" type="button" onclick="window.print()">Download PDF</button>`,
+    payable.deposit !== undefined ? payButton('deposit', payable.deposit, 'Pay deposit', true) : '',
+    payable.balance !== undefined ? payButton('balance', payable.balance, payable.deposit !== undefined ? 'Pay in full' : 'Pay', payable.deposit === undefined) : '',
+  ].join('');
+
+  const accept = canAccept
+    ? `<form class="accept" method="post" action="/i/${escape(token)}/accept">
+        <div class="msg"><b>Approve this estimate</b><br/><span class="muted">Type your full name to sign and accept${
+          depositStatus(doc).amount ? `. A deposit of ${escape(money(depositStatus(doc).amount))} is requested` : ''
+        }.</span></div>
+        <input name="name" required maxlength="100" placeholder="Your full name" autocomplete="name"/>
+        <button class="pay" type="submit">Accept estimate</button>
+      </form>`
+    : '';
+
+  const bar = `<div class="${cls}"><div class="msg">${message}</div><div class="actions">${actions}</div></div>${accept}`;
 
   const fallbackProfile = {
     name: '',
@@ -75,7 +104,7 @@ export function hostedInvoicePage(params: {
     appName,
     bodyPrefix: bar,
     extraCss: BAR_CSS,
-  }).replace('<head>', `<head><title>${escape(`${doc.type === 'invoice' ? 'Invoice' : 'Estimate'} ${doc.number}`)}</title><meta name="robots" content="noindex"/>`);
+  }).replace('<head>', `<head><title>${escape(`${isInvoice ? 'Invoice' : 'Estimate'} ${doc.number}`)}</title><meta name="robots" content="noindex"/>`);
 }
 
 export function simplePage(title: string, body: string): string {

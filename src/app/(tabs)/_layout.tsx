@@ -18,7 +18,7 @@ export default function TabLayout() {
       <Tabs.Screen name="index" options={{ title: 'Invoices', tabBarIcon: tabIcon('document-text-outline') }} />
       <Tabs.Screen name="estimates" options={{ title: 'Estimates', tabBarIcon: tabIcon('clipboard-outline') }} />
       <Tabs.Screen name="clients" options={{ title: 'Clients', tabBarIcon: tabIcon('people-outline') }} />
-      <Tabs.Screen name="reports" options={{ title: 'Reports', tabBarIcon: tabIcon('bar-chart-outline') }} />
+      <Tabs.Screen name="reports" options={{ title: 'Money', tabBarIcon: tabIcon('wallet-outline') }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarIcon: tabIcon('settings-outline') }} />
     </Tabs>
   );
