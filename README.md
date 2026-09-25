@@ -91,6 +91,23 @@ npx eas-cli@latest build --profile development --platform ios   # or android
 
 In development builds, **Settings → Developer → Simulate Pro** turns on every Pro screen without a store account.
 
+## Testing without an Apple developer account
+
+You can test almost everything, including subscriptions, before paying for Apple's developer program.
+
+- **On your own iPhone or Android phone, with no build:** install **Expo Go** from the App Store or Play Store, run `npm run start:go`, and scan the QR code. Purchases go through RevenueCat's **Test Store**, which simulates buying and cancelling, and Pro unlocks just as it would for a real subscriber. Push notifications don't work in Expo Go.
+- **Android build that installs directly:** `npx eas-cli@latest build --profile development --platform android` makes an APK you install from a link. It needs only a free Expo account, with no Google Play account.
+- **In a browser:** `npm run web`. The Test Store works there too.
+
+To turn on Test Store purchases:
+
+1. In RevenueCat, open **Product catalog → Products → + New**, choose the **Test Store** app, and add `pro_monthly` and `pro_annual` with prices and a 7-day free trial.
+2. Under **Entitlements**, create `pro` and attach both products.
+3. Under **Offerings**, create one, add Monthly and Annual packages, and mark it **Current**.
+4. Copy the Test Store public key (`test_…`) from **API keys** into `EXPO_PUBLIC_REVENUECAT_TEST_KEY` in `.env.local`, or into `eas.json` for builds.
+
+When your store keys (`appl_…`, `goog_…`) are added later, native builds use them automatically. Expo Go and the web keep using the Test Store.
+
 ## Setting up subscriptions and the free trial
 
 1. **App Store Connect / Google Play Console:** create an auto-renewing subscription group with, for example, `pro_monthly` and `pro_annual`. Add a **free trial introductory offer**, such as 7 days, to each product.
